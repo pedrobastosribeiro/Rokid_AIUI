@@ -48,5 +48,5 @@ recognition.start();
 
 - **[Speech Synthesis](/AIUI/guide/basic-ai-tts)**: See how to speak the result back to the user.
 - **[Large Language Model](/AIUI/guide/basic-ai-llm)**: See how to pass the recognition result to a model for processing.
-- **[Localizing Voice Agents](/AIUI/guide/basic-ai-locale)**: See how to target a language such as `pt-BR`.
+- **[Glasses language (pt-BR)](/AIUI/guide/basic-ai-locale)**: See how to target a language such as `pt-BR`.
 - **[Speech Recognition (API Reference)](/AIUI/api/ai-speech-recognition)**: See the complete API reference.

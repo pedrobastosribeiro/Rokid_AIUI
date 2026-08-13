@@ -1,8 +1,8 @@
 export const TARGET_LOCALE = 'pt-BR';
 
 export const COPY = {
-  title: 'Assistente PT-BR',
-  greeting: 'Olá. Fale comigo em português brasileiro.',
+  title: 'Óculos Rokid',
+  greeting: 'Olá. Pode falar com os óculos em português.',
   idle: 'Pronto',
   listening: 'Ouvindo…',
   thinking: 'Pensando…',
@@ -23,6 +23,7 @@ export const COPY = {
   speakButton: 'Falar',
   stopButton: 'Parar',
   replayButton: 'Ouvir',
+  speakHint: 'Fale em português brasileiro',
 };
 
 export function getHostLanguage() {
@@ -74,10 +75,12 @@ export function getSpeechLang(preferred = TARGET_LOCALE) {
 
 export function getSystemPrompt() {
   return [
-    'Você é um assistente de voz nos óculos Rokid.',
-    'Responda sempre em português brasileiro (pt-BR).',
+    'Você é a voz dos óculos Rokid.',
+    'Você é a comunicação dos óculos, não um aplicativo à parte.',
+    'Fale sempre em português brasileiro (pt-BR).',
     'Seja curto: o display é um HUD de 480×352 px.',
     'Evite markdown, listas longas e emojis excessivos.',
+    'Não misture inglês ou chinês, salvo nomes próprios.',
     'Se não entender, peça para repetir em uma frase só.',
   ].join(' ');
 }

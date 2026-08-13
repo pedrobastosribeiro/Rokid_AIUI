@@ -1,12 +1,19 @@
-# 语音智能体本地化（pt-BR）
+# 眼镜语言（pt-BR）
 
-AIUI 不会安装系统语言包。要让眼镜用某种语言（例如巴西葡萄牙语）对话，需要分别配置 **三层**：宿主应用语言、语音输入/输出，以及模型提示词。
+AIUI 不会安装系统语言包。要让**眼镜本身**用巴西葡萄牙语交流（而不只是一个专用智能体），需要分别配置 **四层**：Hi Rokid 系统语言、语音输入、模型提示词，以及语音播报。
 
-本文以 **`pt-BR`** 作为第一个可落地的本地化示例。可运行实现见 [`samples/pt-br`](../../../../samples/pt-br)。
+可运行的眼镜语音循环见 [`samples/pt-br`](../../../../samples/pt-br)。
 
-## 1. 宿主语言
+## 1. 眼镜系统语言（必需）
 
-配套应用（Hi Rokid）负责运行时语言。G1.9.9 起提供葡萄牙语界面和地区设置。
+配套应用（Hi Rokid）负责菜单、HUD 框架、地区设置和内置助手。G1.9.9 起提供葡萄牙语界面。
+
+在已配对的手机上：
+
+1. 将 Hi Rokid 更新到 G1.9.9 或更高版本。
+2. 打开 **Language settings**，选择 **Português**。
+3. 如果应用提供地区选项，一并设置 **region**。
+4. 检查眼镜固件更新，让 HUD 跟随应用语言。
 
 智能体可以读取该语言，但不能替换它：
 
@@ -16,7 +23,7 @@ const languages = navigator.languages;
 const region = navigator.region;
 ```
 
-用这些值做文案回退。在用户改完应用语言之前，不要假设当前就是 `pt-BR`。
+用这些值做文案回退。在用户改完应用语言之前，即使智能体用 pt-BR 回复，`navigator.language` 仍可能是英语或中文。
 
 ## 2. 语音识别
 
@@ -32,7 +39,7 @@ recognition.start();
 
 ## 3. 模型回复
 
-在 `AGENTS.md` 和 `LanguageModel` 的 `initialPrompts` 中强制回复语言。这是目前最可靠的 pt-BR 开关：
+在 `AGENTS.md` 和 `LanguageModel` 的 `initialPrompts` 中强制回复语言。这是 AIUI 智能体内最可靠的 pt-BR 开关。把模型当成眼镜的声音，而不是一个独立应用：
 
 ```javascript
 const session = await LanguageModel.create({
@@ -40,7 +47,7 @@ const session = await LanguageModel.create({
     {
       role: 'system',
       content:
-        'Você é um assistente de voz nos óculos Rokid. Responda sempre em português brasileiro (pt-BR). Seja curto.',
+        'Você é a voz dos óculos Rokid. Fale sempre em português brasileiro (pt-BR). Seja curto.',
     },
   ],
 });
@@ -60,13 +67,13 @@ speechSynthesis.speak(utterance);
 
 如果端侧 TTS 仍是错误语言，请改用支持 pt-BR 的云端 TTS。可参考 [Minimax TTS 示例](https://github.com/jsar-project/AIUI/tree/main/samples/tts)。
 
-## 5. 发布 pt-BR 示例
+## 5. 发布眼镜语音循环
 
 ```bash
 aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-然后在 [AIUI Studio Global](https://aiui-global.rokid.com/) 上传安装包，更新眼镜资源包，并用智能体名称唤醒。
+然后在 [AIUI Studio Global](https://aiui-global.rokid.com/) 上传安装包，更新眼镜资源包，并直接说葡萄牙语。在 Studio 里把应用命名为眼镜的声音（例如 **Óculos Rokid**），而不是一个专用助手。
 
 ## 继续阅读
 
