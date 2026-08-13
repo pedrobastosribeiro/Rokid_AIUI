@@ -25,13 +25,20 @@ import {
   isPortuguese,
 } from '../../lib/locale.js';
 
-// The HUD is 480 x 352 px. Text is clamped before it reaches the view so the
-// truncation is visible ("…") and so it holds even on hosts that ignore
+// Text is clamped before it reaches the view so the truncation is visible
+// ("…") rather than a mid-sentence cut, and so it holds on hosts that ignore
 // `overflow` / `max-height` — neither is on the confirmed WXSS property list,
-// where the CSS below is the backstop. Roughly four lines at 14px; keep it in
-// step with `.body { max-height }`. The full text still goes to the model and
-// to TTS.
-const MAX_HUD_CHARS = 220;
+// where the CSS below is only the backstop.
+//
+// The budget is what the panels actually get, not what looks generous. On the
+// 480 x 352 canvas the non-shrinking chrome (header, meta, status, hint,
+// actions) plus padding and gaps costs ~193px of the 328px inner height,
+// leaving ~67px per panel; minus each panel's border, padding, and label that
+// is ~35px of body, or roughly two 19.6px lines. At ~60 characters per line,
+// 100 is the safe limit. Keep it in step with `.body { max-height }`.
+//
+// The full text still goes to the model and to TTS.
+const MAX_HUD_CHARS = 100;
 
 function normalizeText(value) {
   if (typeof value !== 'string') {
@@ -599,9 +606,11 @@ export default {
 }
 
 .body {
-  /* Backstop for the JS clamp; four lines at line-height 1.4, which keeps both
-     panels plus the chrome inside 352px. Keep in step with MAX_HUD_CHARS. */
-  max-height: 5.6em;
+  /* Backstop for the JS clamp: two lines at line-height 1.4, which is what a
+     panel actually gets once the chrome is subtracted from 352px. The clamp is
+     sized to fire first so the user sees "…" instead of a hard cut. Keep in
+     step with MAX_HUD_CHARS. */
+  max-height: 2.8em;
   overflow: hidden;
   font-size: 14px;
   line-height: 1.4;
