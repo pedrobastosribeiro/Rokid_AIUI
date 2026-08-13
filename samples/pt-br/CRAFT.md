@@ -9,12 +9,12 @@ https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/main/samples/pt-br
 
 Erro típico: `GitHub ref not found: main/samples/pt-br`.
 
-Cole **esta** URL (o agente está na raiz do branch):
+Cole **esta** URL (o agente está na raiz do branch `pt-br`):
 
 ```text
-https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-craft-e686
+https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/pt-br
 ```
 
-No celular, selecione tudo no campo, cole, e arraste o texto até confirmar que termina em `pt-br-craft-e686`.
+No celular, selecione tudo no campo, cole, e arraste o texto até confirmar que termina em `/tree/pt-br` — sem `main` e sem `samples`.
 
-Não faça merge deste branch na `main`. Ele existe só para o import/pack no Craft.
+Não faça merge do branch `pt-br` na `main`. Ele existe só para o import/pack no Craft.

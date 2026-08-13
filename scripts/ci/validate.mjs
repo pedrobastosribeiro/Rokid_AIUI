@@ -103,10 +103,10 @@ function moduleType(file) {
 // Craft resolves everything after `/tree/` as one ref, so it cannot reach
 // `/tree/main/samples/pt-br`. Exempt from the review-branch link rule below;
 // delete both once Craft accepts a path after the ref.
-const PUBLISH_BRANCH = 'cursor/pt-br-craft-e686';
-// The exemption is scoped to this repository. The same branch name under a
-// different owner is someone else's throwaway and should still be reported.
-const PUBLISH_REPO = 'pedrobastosribeiro/rokid_aiui';
+const PUBLISH_BRANCH = 'pt-br';
+// The old Cursor-prefixed publish branch must not remain the documented
+// Craft import URL. The long-lived branch is `pt-br`.
+const CURSOR_CRAFT_BRANCH = /cursor\/pt-br-craft-e686/;
 
 // Pinned so a CLI release cannot change what CI means without a commit.
 const AIX_CLI = '@yodaos-pkg/aix-cli@0.8.2';
@@ -401,6 +401,12 @@ const checks = {
     for (const file of files) {
       const base = dirname(file);
       const text = read(file);
+      if (CURSOR_CRAFT_BRANCH.test(text)) {
+        fail(
+          `${file}: Craft import URL still names cursor/pt-br-craft-e686; ` +
+            `use https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/${PUBLISH_BRANCH}`,
+        );
+      }
       for (const match of text.matchAll(LINK)) {
         const raw = match[1] !== undefined ? match[1] : match[2];
         if (!raw) continue;
@@ -426,7 +432,7 @@ const checks = {
       for (const match of text.matchAll(
         /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
       )) {
-        const [, owner, repo, rawTarget] = match;
+        const [, , , rawTarget] = match;
         // Trailing characters may belong to the prose or to the ref, and which
         // one depends on how the URL was written. Read that from the character
         // *before* the match: `(` or `<` means the destination is delimited, so
@@ -448,10 +454,7 @@ const checks = {
         target = target.replace(/\/+$/, '');
         if (!target) continue;
 
-        if (
-          `${owner}/${repo}`.toLowerCase() === PUBLISH_REPO &&
-          (target === PUBLISH_BRANCH || target.startsWith(`${PUBLISH_BRANCH}/`))
-        ) {
+        if (target === PUBLISH_BRANCH || target.startsWith(`${PUBLISH_BRANCH}/`)) {
           continue;
         }
 

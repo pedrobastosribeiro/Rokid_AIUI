@@ -37,10 +37,10 @@ The page also prints `navigator.language` so you can compare the **host language
 2. **GitHub Subdirectory Import** — paste this URL (not `main/samples/pt-br`):
 
 ```text
-https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-craft-e686
+https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/pt-br
 ```
 
-   Craft looks up everything after `/tree/` as one git ref, so `/tree/main/samples/pt-br` fails with `GitHub ref not found: main/samples/pt-br`. The URL above is a publish branch whose root already contains `app.json`. On a phone, select-all in the field and confirm the text ends in `pt-br-craft-e686`.
+   Craft looks up everything after `/tree/` as one git ref, so `/tree/main/samples/pt-br` fails with `GitHub ref not found: main/samples/pt-br`. The URL above is the long-lived `pt-br` publish branch, whose root already contains `app.json`. On a phone, select-all in the field and confirm the text ends in `/tree/pt-br` — no `main`, no `samples`.
 3. Click **Run Agent** — listening starts in `pt-BR`
 4. Speak Portuguese, and check:
    - transcript language
