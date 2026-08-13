@@ -119,6 +119,9 @@ export default {
     });
 
     await this.refreshAvailability();
+    if (!this.pageActive) {
+      return;
+    }
 
     const initialPrompt = normalizeText(query && query.prompt);
     if (initialPrompt) {
@@ -151,7 +154,7 @@ export default {
   },
 
   onVoiceWakeup() {
-    if (!this.data.isBusy) {
+    if (!this.data.isBusy && !this.promptInFlight) {
       this.startTalk();
     }
   },
