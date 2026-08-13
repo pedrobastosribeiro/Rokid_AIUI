@@ -188,11 +188,12 @@ export default {
     });
 
     const initialPrompt = normalizeText(query && query.prompt);
-    // Start warming the host voice list, but do not await it here. Browsers
-    // populate it asynchronously, and blocking `initializing` on it would
-    // reject the temple button, voice wakeup and ASR for up to a second over a
-    // TTS nicety. answerPrompt() awaits it just before speaking instead, by
-    // which point a model round trip has already passed.
+    // Warm the host voice list in the background. Browsers populate it
+    // asynchronously, so reading it cold at the first speak() would use the
+    // default voice. Nothing awaits this: by the time any reply is spoken an
+    // availability round trip and a model round trip have both elapsed, and
+    // every await placed on the speak path turned out to open a re-entrancy
+    // window instead -- Stop unable to cancel, replay talking over a new turn.
     ensureVoicesReady();
     await this.refreshAvailability();
     if (!this.pageActive) {
@@ -466,13 +467,11 @@ export default {
       }
       this.lastReplyText = reply;
       this.setData({ lastReply: clampForHud(reply) || '(sem texto)' });
-      // Warmed since load, so this is normally already resolved. Awaiting it
-      // here rather than at load keeps the wait off the input path: delaying
-      // speech by a moment is harmless, delaying the microphone is not.
-      await ensureVoicesReady();
-      if (!this.isTurnCurrent(currentTurnId)) {
-        return;
-      }
+      // Deliberately not awaited. The registry is warmed at load and a model
+      // round trip has since elapsed, so it is populated by now; awaiting here
+      // bought a guarantee for one narrow case and cost three re-entrancy
+      // windows -- Stop could not cancel the pending turn, a wakeup could open
+      // a turn the reply then spoke over, and an empty reply still waited.
       const speaking = this.speakReply(reply);
       // No utterance lifecycle event is exposed yet, so the turn is released as
       // soon as playback is dispatched. The HUD stays on "Falando…" until the
@@ -524,18 +523,13 @@ export default {
     return true;
   },
 
-  async replayReply() {
+  replayReply() {
     if (this.data.isBusy || this.promptInFlight) {
       return;
     }
-    // The same readiness gate answerPrompt() uses. Without it, replaying the
-    // greeting while the registry is still filling -- reachable when the page
-    // opens with no query and ASR is unavailable -- speaks in the default
-    // voice, which is the one path that still bypassed the warmup.
-    await ensureVoicesReady();
-    if (!this.pageActive) {
-      return;
-    }
+    // Synchronous for the same reason as the reply path: awaiting readiness
+    // here yields, and a wakeup or a second tap during that window would let
+    // replay speak over a turn that started meanwhile.
     // Replays the unclamped reply, not the HUD copy.
     if (this.speakReply(this.lastReplyText)) {
       this.setData({ status: COPY.speaking });
