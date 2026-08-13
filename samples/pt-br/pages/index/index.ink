@@ -21,6 +21,7 @@ import {
   COPY,
   TARGET_LOCALE,
   applyPortugueseSpeech,
+  ensureVoicesReady,
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
@@ -187,6 +188,15 @@ export default {
     });
 
     const initialPrompt = normalizeText(query && query.prompt);
+    // Warm the host voice list in the background. Browsers populate it
+    // asynchronously, so reading it cold at the first speak() would use the
+    // default voice. Nothing awaits this, and that is a deliberate trade rather
+    // than a guarantee: a reply dispatched before discovery settles -- a cached
+    // availability check, a cached model reply, or replaying the greeting, which
+    // makes no round trip at all -- still speaks in the host default. Awaiting
+    // here or on the speak path fixes that one utterance and opens a re-entrancy
+    // window instead: Stop unable to cancel, replay talking over a new turn.
+    ensureVoicesReady();
     await this.refreshAvailability();
     if (!this.pageActive) {
       return;
@@ -459,6 +469,11 @@ export default {
       }
       this.lastReplyText = reply;
       this.setData({ lastReply: clampForHud(reply) || '(sem texto)' });
+      // Deliberately not awaited. The registry is warmed at load and a model
+      // round trip has since elapsed, so it is populated by now; awaiting here
+      // bought a guarantee for one narrow case and cost three re-entrancy
+      // windows -- Stop could not cancel the pending turn, a wakeup could open
+      // a turn the reply then spoke over, and an empty reply still waited.
       const speaking = this.speakReply(reply);
       // No utterance lifecycle event is exposed yet, so the turn is released as
       // soon as playback is dispatched. The HUD stays on "Falando…" until the
@@ -514,6 +529,9 @@ export default {
     if (this.data.isBusy || this.promptInFlight) {
       return;
     }
+    // Synchronous for the same reason as the reply path: awaiting readiness
+    // here yields, and a wakeup or a second tap during that window would let
+    // replay speak over a turn that started meanwhile.
     // Replays the unclamped reply, not the HUD copy.
     if (this.speakReply(this.lastReplyText)) {
       this.setData({ status: COPY.speaking });
