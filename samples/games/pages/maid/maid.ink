@@ -17,9 +17,9 @@ export default {
   },
   sayHello() {
     if (this.data.isSpeaking) return;
-    
+
     this.setData({ isSpeaking: true });
-    
+
     const utterance = new SpeechSynthesisUtterance(this.data.message);
     utterance.lang = 'zh-CN';
     utterance.onend = () => {
@@ -50,7 +50,7 @@ export default {
         <view class="maid-hair-front"></view>
         <view class="maid-headband"></view>
       </view>
-      
+
       <view class="speech-bubble">
         <text>{{message}}</text>
       </view>

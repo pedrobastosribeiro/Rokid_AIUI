@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -78,4 +79,27 @@ test('keeps HUD copy in Portuguese', () => {
   assert.match(COPY.title, /Óculos Rokid/);
   assert.match(COPY.greeting, /português/);
   assert.match(COPY.speakHint, /português brasileiro/);
+});
+
+const inkSource = readFileSync(
+  new URL('../samples/pt-br/pages/index/index.ink', import.meta.url),
+  'utf8',
+);
+
+test('the voice loop pins ASR and TTS to the target locale', () => {
+  assert.match(inkSource, /recognition\.lang = TARGET_LOCALE/);
+  assert.match(inkSource, /utterance\.lang = TARGET_LOCALE/);
+});
+
+test('the voice loop starts listening on load and guards unload', () => {
+  assert.match(inkSource, /this\.initializing = false;[\s\S]*this\.startTalk\(\);/);
+  assert.match(inkSource, /this\.pageActive = false/);
+});
+
+test('the voice loop routes ASR failures through the localized map', () => {
+  assert.match(inkSource, /getAsrFailureMessage\(/);
+});
+
+test('TTS is dispatched immediately rather than queued', () => {
+  assert.match(inkSource, /speechSynthesis\.speak\(utterance, 'immediate'\)/);
 });
