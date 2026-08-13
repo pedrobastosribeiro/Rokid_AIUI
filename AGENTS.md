@@ -2,7 +2,7 @@
 
 This repository provides developer tools, a scaffolding CLI, AI agent skills, sample apps, and documentation for building applications on **AIUI**. See `README.md` for the full overview.
 
-> **What this file is.** This root `AGENTS.md` is Cursor Cloud / cross-tool **agent operating guidance** — what a Cloud VM can and cannot run. It is deliberately *not* an Open Agent Format manifest. Those live in `samples/*/AGENTS.md` and the scaffold template; [the spec](documentation/1-framework/open-agent-format/agents.md) defines `# Agent: <name>` / `## System Prompts` / `## Capabilities` / `## Configuration` / `## Dependencies`, but that shape is aspirational — only `samples/pt-br` currently follows it, and the rest predate the spec. Do not rewrite them to match as a side effect of an unrelated change. Repository authoring conventions (checks, `.ink`, docs, packaging) live in `CLAUDE.md`; this file only covers the Cloud VM environment.
+> **What this file is.** This root `AGENTS.md` is Cursor Cloud / cross-tool **agent operating guidance** — what a Cloud VM can and cannot run. It is deliberately *not* an agent manifest. Those live in `samples/*/AGENTS.md` and the scaffold template, and they use the Identity form (`# Agent Manifest` → `## Identity` → `- **Name**:`), which is what AIUI Studio validates on upload. [The Open Agent Format spec](documentation/1-framework/open-agent-format/agents.md) documents a different shape (`# Agent: <name>`); Studio rejects it, no manifest here follows it, and rewriting one toward it breaks the upload. Repository authoring conventions (checks, `.ink`, docs, packaging) live in `CLAUDE.md`; this file only covers the Cloud VM environment.
 
 ## Cursor Cloud specific instructions
 
