@@ -99,6 +99,15 @@ function moduleType(file) {
   }
 }
 
+// A long-lived branch whose root is the packed sample, so Craft can import it.
+// Craft resolves everything after `/tree/` as one ref, so it cannot reach
+// `/tree/main/samples/pt-br`. Exempt from the review-branch link rule below;
+// delete both once Craft accepts a path after the ref.
+const PUBLISH_BRANCH = 'cursor/pt-br-craft-e686';
+// The exemption is scoped to this repository. The same branch name under a
+// different owner is someone else's throwaway and should still be reported.
+const PUBLISH_REPO = 'pedrobastosribeiro/rokid_aiui';
+
 // Pinned so a CLI release cannot change what CI means without a commit.
 const AIX_CLI = '@yodaos-pkg/aix-cli@0.8.2';
 const runAix = (args) =>
@@ -391,7 +400,8 @@ const checks = {
 
     for (const file of files) {
       const base = dirname(file);
-      for (const match of read(file).matchAll(LINK)) {
+      const text = read(file);
+      for (const match of text.matchAll(LINK)) {
         const raw = match[1] !== undefined ? match[1] : match[2];
         if (!raw) continue;
         // Skip external URLs, anchors, and site-absolute routes -- the last
@@ -413,21 +423,51 @@ const checks = {
       }
 
       // A link into a review branch 404s the moment that branch is deleted.
-      // cursor/pt-br-craft-e686 is a long-lived publish branch: Craft cannot
-      // import /tree/main/samples/pt-br (it looks up that whole string as a ref).
-      for (const match of read(file).matchAll(
-        /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
+      for (const match of text.matchAll(
+        /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
       )) {
-        const rest = match[1].replace(/\/$/, '');
+        const [, owner, repo, rawTarget] = match;
+        // Trailing characters may belong to the prose or to the ref, and which
+        // one depends on how the URL was written. Read that from the character
+        // *before* the match: `(` or `<` means the destination is delimited, so
+        // its boundary is already known and everything in it is the target.
+        // Looking at the following character instead would misread Markdown's
+        // optional title -- in `[x](URL "title")` the match stops at the space.
+        const before = text[match.index - 1];
+        const delimited = before === '(' || before === '<';
+
+        let target = rawTarget.split(/[?#]/)[0];
+        // git check-ref-format: a ref can contain neither `:` nor a trailing
+        // `.`, so those are prose wherever they appear.
+        target = target.replace(/[.:]+$/, '');
+        // `,` `;` `!` `]` are all legal in a ref name, so they can only be
+        // stripped where the URL ran to whitespace and they are ambiguous.
+        if (!delimited) {
+          target = target.replace(/[,;!\]]+$/, '');
+        }
+        target = target.replace(/\/+$/, '');
+        if (!target) continue;
+
         if (
-          rest === 'cursor/pt-br-craft-e686' ||
-          rest.startsWith('cursor/pt-br-craft-e686/')
+          `${owner}/${repo}`.toLowerCase() === PUBLISH_REPO &&
+          (target === PUBLISH_BRANCH || target.startsWith(`${PUBLISH_BRANCH}/`))
         ) {
           continue;
         }
-        const ref = rest.split('/')[0];
+
+        // `/tree/a/b/c` is ambiguous offline: branch "a" with path "b/c", or
+        // branch "a/b" with path "c". Taking the first segment therefore lets
+        // through a branch literally named something like "main/draft".
+        // Accepted -- disambiguating needs the GitHub API, and the miss is a
+        // branch name nobody picks by accident.
+        const ref = target.split('/')[0];
+        // A commit permalink is the most durable link there is, and rejecting
+        // it inverted the point of the rule. A 40-hex ref is a SHA; the short
+        // forms GitHub renders are 7 or more. Case-insensitive, since object
+        // IDs resolve that way.
+        if (/^[0-9a-f]{7,40}$/i.test(ref)) continue; // immutable commit
         if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
-        fail(`${file}: links into branch "${rest}", which will not outlive the review`);
+        fail(`${file}: "${target}" points at a branch that will not outlive the review`);
       }
     }
 
