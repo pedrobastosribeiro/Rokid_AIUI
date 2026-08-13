@@ -8,10 +8,11 @@ name: Sync Craft pt-BR branch
 on:
   # Deliberately every push to main, with no `paths:` filter. A subtree split
   # that republishes an identical tree is a no-op, so running always is what
-  # makes the branch self-healing: if one run fails, is cancelled, or someone
-  # force-pushes over pt-br by hand, the next commit to main repairs it. With a
-  # paths filter the branch could only be repaired by another edit to the
-  # sample, which is how a stale import URL survives unnoticed.
+  # makes the branch heal itself: if one run fails, is cancelled, or someone
+  # force-pushes over pt-br by hand, the next commit to main repairs it. Add a
+  # paths filter back and repair stops being automatic -- it takes either
+  # another edit to the sample or someone noticing and dispatching this
+  # workflow by hand, which is how a stale import URL survives unnoticed.
   push:
     branches:
       - main
@@ -38,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -d samples/pt-br ]; then
-            echo "::error::samples/pt-br does not exist, so the split below cannot run and refs/heads/pt-br will keep serving the old sample. README.md, README.zh-CN.md and both quickstarts document that branch as the Craft import URL -- move --prefix here and update those URLs in the same change."
+            echo "::error::samples/pt-br does not exist, so the split below cannot run and refs/heads/pt-br will keep serving the old sample. Move --prefix here, and update every place that documents the import URL in the same change: git grep -n 'tree/pt-br'"
             exit 1
           fi
           git subtree split --prefix=samples/pt-br -b pt-br-craft-split
