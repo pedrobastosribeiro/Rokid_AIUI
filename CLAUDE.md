@@ -19,11 +19,14 @@ The validator is deliberately dependency-free — the repo ships no tooling lock
 
 Publishing `create-aiui-agent` to npm gates on these checks, so a red run blocks the release. The publish is triggered by bumping `version` in `packages/create-aiui-agent/package.json` on `main`; it skips itself when that version is already on the registry.
 
-## `AGENTS.md` is a format, not a readme
+## `AGENTS.md` is a format, not a readme — except at the repo root
 
-In this repo `AGENTS.md` is a specification — an agent manifest with a required shape (`# Agent: <name>`, `## System Prompts`, `## Capabilities`), defined in [the Open Agent Format docs](documentation/1-framework/open-agent-format/agents.md). Every sample has one, and `create-aiui-agent` scaffolds one into each new project.
+Two different jobs share the same filename. Do not collapse them.
 
-Do not put repository prose in a file named `AGENTS.md`. Repository guidance goes here.
+- **`samples/*/AGENTS.md` and `packages/create-aiui-agent/template/AGENTS.md`** are Open Agent Format manifests — a required shape (`# Agent: <name>`, `## System Prompts`, `## Capabilities`), defined in [the format docs](documentation/1-framework/open-agent-format/agents.md). Every sample has one, and `create-aiui-agent` scaffolds one into each new project. Do not put repository prose in those files.
+- **The root `AGENTS.md`** is Cursor Cloud / cross-tool **agent operating guidance**: what a Cloud VM can and cannot run (the scaffolding CLI, `npm test` vs `pack`'s network need, `npm ci` vs the `npm install` lockfile trap). Cursor Cloud and other agents load that filename automatically; the filename *is* the mechanism. Do not rename it to `DEVELOPMENT.md`, do not treat it as a misplaced manifest, and do not fold its content into this file.
+
+Repository authoring conventions (this document) go here. Cloud VM operating guidance goes in the root `AGENTS.md`.
 
 ## Writing `.ink` samples
 
