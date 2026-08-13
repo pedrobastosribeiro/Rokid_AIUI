@@ -1,0 +1,82 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# A new push to a PR makes the in-flight run obsolete.
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Run each check as its own step so a failure names itself in the UI
+      # instead of hiding inside one aggregate log.
+      - name: JSON parses
+        run: node scripts/ci/validate.mjs json
+
+      - name: Scripts parse
+        run: node scripts/ci/validate.mjs syntax
+
+      - name: Sample pages and components resolve
+        run: node scripts/ci/validate.mjs samples
+
+      - name: Markdown links resolve
+        run: node scripts/ci/validate.mjs links
+
+  scaffold:
+    name: Scaffold a project from the template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # daily-build.yml publishes this package every night with no prior check,
+      # so a broken scaffold ships straight to npm. Run the bin the way a user
+      # does and assert the output looks like a project.
+      - name: Run create-aiui-agent
+        run: node packages/create-aiui-agent/index.js smoke-agent
+
+      - name: Check the scaffolded project
+        run: |
+          set -euo pipefail
+          for f in app.js app.json package.json pages/index/index.ink AGENTS.md; do
+            test -f "smoke-agent/$f" || { echo "missing $f in scaffolded project"; exit 1; }
+          done
+          node -e "
+            const fs = require('node:fs');
+            const pkg = JSON.parse(fs.readFileSync('smoke-agent/package.json', 'utf8'));
+            if (pkg.name !== 'smoke-agent') {
+              throw new Error('{{PROJECT_NAME}} was not substituted: ' + pkg.name);
+            }
+            for (const file of ['smoke-agent/app.json', 'smoke-agent/package.json']) {
+              JSON.parse(fs.readFileSync(file, 'utf8'));
+            }
+          "
+
+      - name: Package publishes cleanly
+        run: npm pack --dry-run
+        working-directory: packages/create-aiui-agent
