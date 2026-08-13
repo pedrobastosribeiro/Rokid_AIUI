@@ -157,9 +157,13 @@ function watchVoiceChanges(api) {
 }
 
 // Resolves once a Portuguese voice is available, or once the timeout expires.
-// Start it at load without awaiting, then await it immediately before speaking:
-// by then it is all but always resolved, and the page never gates user input on
-// it. Cheap to call repeatedly, and a host with no voice registry at all -- the
+// Call it at load and do not await it anywhere: it exists to have the registry
+// already populated by the time applyPortugueseSpeech() reads it, not to gate
+// playback. That is best effort, not a guarantee -- a reply dispatched inside
+// the discovery window still speaks in the host default. Awaiting it on the
+// speak path would close that window but reopen a worse one, since every await
+// added there let Stop and replay interleave with a turn already in flight.
+// Cheap to call repeatedly, and a host with no voice registry at all -- the
 // glasses runtime -- resolves on the spot with an empty list.
 export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
   // Ready means a *Portuguese* voice exists, not merely some voice. Hosts

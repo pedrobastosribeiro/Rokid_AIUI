@@ -190,10 +190,12 @@ export default {
     const initialPrompt = normalizeText(query && query.prompt);
     // Warm the host voice list in the background. Browsers populate it
     // asynchronously, so reading it cold at the first speak() would use the
-    // default voice. Nothing awaits this: by the time any reply is spoken an
-    // availability round trip and a model round trip have both elapsed, and
-    // every await placed on the speak path turned out to open a re-entrancy
-    // window instead -- Stop unable to cancel, replay talking over a new turn.
+    // default voice. Nothing awaits this, and that is a deliberate trade rather
+    // than a guarantee: a reply dispatched before discovery settles -- a cached
+    // availability check, a cached model reply, or replaying the greeting, which
+    // makes no round trip at all -- still speaks in the host default. Awaiting
+    // here or on the speak path fixes that one utterance and opens a re-entrancy
+    // window instead: Stop unable to cancel, replay talking over a new turn.
     ensureVoicesReady();
     await this.refreshAvailability();
     if (!this.pageActive) {
