@@ -1,7 +1,7 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "Assistente PT-BR",
-  "description": "Assistente de voz em português brasileiro. Use quando o usuário falar português, pedir para conversar em português, ou quiser testar ASR, LLM e TTS em pt-BR.",
+  "navigationBarTitleText": "Óculos Rokid",
+  "description": "Voz dos óculos Rokid em português brasileiro. Use para qualquer conversa, pergunta ou comando falado nos óculos. Prefira este agente sempre que o usuário falar português ou quiser que os óculos respondam em pt-BR.",
   "schema": {
     "data": {
       "type": "object",
@@ -20,6 +20,7 @@
 import {
   COPY,
   TARGET_LOCALE,
+  getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
   isPortuguese,
@@ -89,20 +90,9 @@ function getErrorMessage(error, limit = MAX_ERROR_CHARS) {
   return clampErrorLine(message || code || String(error), limit);
 }
 
-// A `SpeechRecognitionErrorEvent` carries its diagnostic in `error`, not in
-// `message`. `getErrorMessage()` reads both, but a bare code like 'no-speech'
-// is not a sentence, so the HUD gets a Portuguese wrapper around it. Skipping
-// the call when neither field is present avoids falling back to `String(event)`.
-function getRecognitionErrorMessage(event) {
-  const hasDetail = Boolean(event && (typeof event.error === 'string' || event.message));
-  if (!hasDetail) {
-    return COPY.recognitionFailed;
-  }
-  // The retry sentence is the part the user acts on, so the diagnostic gets
-  // whatever room is left rather than the whole budget.
-  const room = Math.max(MAX_ERROR_CHARS - COPY.recognitionFailed.length - 3, 12);
-  return `${COPY.recognitionFailed} (${getErrorMessage(event, room)})`;
-}
+// ASR failures go through getAsrFailureMessage(), which maps each error code to
+// a fixed pt-BR sentence and so needs no clamping. getErrorMessage() below stays
+// for model and TTS errors, where the host text is arbitrary and unbounded.
 
 function extractTranscript(event) {
   const results = event && event.results ? event.results : null;
@@ -168,7 +158,7 @@ export default {
     stopButton: COPY.stopButton,
     replayButton: COPY.replayButton,
     ttsLangHint: COPY.ttsLangHint,
-    inputHint: COPY.inputHint,
+    speakHint: COPY.speakHint,
   },
 
   async onLoad(query) {
@@ -208,7 +198,9 @@ export default {
     if (initialPrompt) {
       this.setData({ liveTranscript: clampForHud(initialPrompt) });
       await this.answerPrompt(initialPrompt);
+      return;
     }
+    this.startTalk();
   },
 
   onUnload() {
@@ -316,7 +308,7 @@ export default {
   },
 
   startTalk() {
-    if (this.initializing) {
+    if (!this.pageActive || this.initializing) {
       return;
     }
     if (!this.data.asrAvailable) {
@@ -367,7 +359,7 @@ export default {
       this.setData({
         isBusy: false,
         status: COPY.idle,
-        lastError: getRecognitionErrorMessage(event),
+        lastError: getAsrFailureMessage(event),
       });
     };
 
@@ -408,7 +400,7 @@ export default {
       this.setData({
         isBusy: false,
         status: COPY.idle,
-        lastError: getErrorMessage(error),
+        lastError: getAsrFailureMessage(error),
       });
     }
   },
@@ -547,7 +539,7 @@ export default {
 
     <view class="panel">
       <text class="label">VOCÊ</text>
-      <text class="body">{{liveTranscript || inputHint}}</text>
+      <text class="body">{{liveTranscript || speakHint}}</text>
     </view>
 
     <view class="panel">
@@ -555,7 +547,9 @@ export default {
       <text class="body">{{lastReply}}</text>
     </view>
 
-    <text class="error" ink:if="{{lastError}}">{{lastError}}</text>
+    <view class="error" ink:if="{{lastError}}">
+      <text class="error-text">{{lastError}}</text>
+    </view>
     <text class="hint">{{ttsLangHint}}</text>
 
     <view class="actions" role="navigation">
@@ -618,8 +612,7 @@ export default {
 }
 
 .meta-line,
-.hint,
-.error {
+.hint {
   font-size: 11px;
   line-height: 1.35;
   color: var(--ink-48);
@@ -658,11 +651,16 @@ export default {
 }
 
 .error {
-  /* Backstop for clampErrorLine(), mirroring `.body`: two lines at the 1.35
-     line-height above. The text is flattened and clamped in JS, so this only
-     has to catch a host diagnostic that wraps further than expected. */
-  max-height: 2.7em;
+  /* Backstop for the JS clamp: two lines at the 1.35 line-height below. Model
+     and TTS diagnostics are flattened and clamped in JS, so this only has to
+     catch one that wraps further than expected. */
+  max-height: 2.8em;
   overflow: hidden;
+}
+
+.error-text {
+  font-size: 11px;
+  line-height: 1.35;
   color: var(--ink);
 }
 
