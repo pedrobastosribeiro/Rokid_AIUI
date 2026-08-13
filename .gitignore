@@ -1,6 +1,11 @@
 node_modules/
 *.aix
 
+# The root has no dependencies, so any lockfile here is an artefact of someone
+# running `npm install` out of habit -- npm writes an empty-tree one. Anchored
+# to the root: a package that grows real dependencies should commit its own.
+/package-lock.json
+
 .trae/specs/
 .trae/documents/
 

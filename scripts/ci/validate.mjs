@@ -136,8 +136,6 @@ const checks = {
   // Catches the hand-edited app.json / index.json / toc.json that the
   // framework loads at runtime.
   json(fail, note) {
-    // package-lock.json is included: a conflicted merge can leave it malformed,
-    // and every `npm ci` downstream fails before anything else gets a chance.
     const files = tracked('*.json');
     for (const file of files) {
       try {
@@ -295,7 +293,7 @@ const checks = {
   // rendering.
   whitespace(fail, note) {
     const files = tracked('*.js', '*.mjs', '*.cjs', '*.ts', '*.ink', '*.json', '*.wxss', '*.wxml', '*.yml')
-      .filter((file) => !isVendored(file) && file !== 'package-lock.json');
+      .filter((file) => !isVendored(file));
 
     for (const file of files) {
       const lines = read(file).split('\n');
