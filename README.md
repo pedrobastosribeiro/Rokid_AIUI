@@ -26,7 +26,7 @@ The [`samples/`](./samples/) directory contains runnable example projects that d
 At the moment, the repository includes:
 
 - [`samples/capabilities/`](./samples/capabilities/): a complete sample app for page structure, assets, helper modules, and feature demos
-- [`samples/pt-br/`](./samples/pt-br/): a Brazilian Portuguese voice agent that pins ASR, the LLM system prompt, and TTS `lang` to `pt-BR`
+- [`samples/pt-br/`](./samples/pt-br/): the glasses' Brazilian Portuguese voice loop (Hi Rokid system language + ASR, LLM prompt, and TTS `lang` pinned to `pt-BR`)
 
 - `pages/`: Example pages covering a range of AIUI capabilities and UI patterns.
 - `assets/`: Static resources used by the demos, such as images, SVGs, and audio files.

@@ -1,6 +1,7 @@
 {
   "name": "{{PROJECT_NAME}}",
   "version": "1.0.0",
+  "type": "module",
   "description": "A JSUI Agent project",
   "main": "app.js",
   "dependencies": {}

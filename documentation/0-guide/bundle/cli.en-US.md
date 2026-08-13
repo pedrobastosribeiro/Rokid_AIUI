@@ -31,6 +31,9 @@ aix pack <source-directory> --optimize
 
 # Specify the optimization level (1-3)
 aix pack <source-directory> -O --opt-level 3
+
+# Declare the engine range the package targets
+aix pack <source-directory> --engine '^0.14.0'
 ```
 
 ### 2. List Contents

@@ -1,0 +1,70 @@
+name: Publish create-aiui-agent
+
+# Publishing follows the version bump rather than the clock. The previous
+# nightly cron tried to publish every day whether or not anything had changed,
+# and npm refuses to republish an existing version, so every night without a
+# bump failed on EPUBLISHCONFLICT.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - packages/create-aiui-agent/package.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # An unattended publish gates on the same checks a pull request gets,
+  # including the one that scaffolds a project from the packed artifact.
+  checks:
+    uses: ./.github/workflows/pr-checks.yml
+
+  publish:
+    name: Publish to npm
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # The path filter fires on any manifest edit, not only a version bump, and
+      # workflow_dispatch has no filter at all. Without this the workflow would
+      # still fail whenever the version had not moved.
+      - name: Is this version already on npm?
+        id: published
+        working-directory: packages/create-aiui-agent
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "package=$name@$version" >> "$GITHUB_OUTPUT"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is already published; nothing to do."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is not on npm yet."
+          fi
+
+      - name: Publish
+        if: steps.published.outputs.already == 'false'
+        working-directory: packages/create-aiui-agent
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.published.outputs.already }}" = "true" ]; then
+            echo "Skipped: ${{ steps.published.outputs.package }} was already on npm." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Published ${{ steps.published.outputs.package }}." >> "$GITHUB_STEP_SUMMARY"
+          fi

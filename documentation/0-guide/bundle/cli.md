@@ -31,6 +31,9 @@ aix pack <源码目录> --optimize
 
 # 指定优化等级 (1-3)
 aix pack <源码目录> -O --opt-level 3
+
+# 声明包所面向的引擎版本范围
+aix pack <源码目录> --engine '^0.14.0'
 ```
 
 ### 2. 查看内容 (List)

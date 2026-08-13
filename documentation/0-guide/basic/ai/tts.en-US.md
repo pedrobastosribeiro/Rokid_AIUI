@@ -47,5 +47,5 @@ speechSynthesis.speak(utterance);
 
 - **[Speech Recognition](/AIUI/guide/basic-ai-asr)**: See how to convert the user's voice into text.
 - **[Large Language Model](/AIUI/guide/basic-ai-llm)**: See how to generate reply content that can be spoken.
-- **[Localizing Voice Agents](/AIUI/guide/basic-ai-locale)**: See how to target a language such as `pt-BR`.
+- **[Glasses language (pt-BR)](/AIUI/guide/basic-ai-locale)**: See how to target a language such as `pt-BR`.
 - **[Speech Synthesis (API Reference)](/AIUI/api/ai-speech-synthesis)**: See the complete API reference.

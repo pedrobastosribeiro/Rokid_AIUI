@@ -30,14 +30,14 @@ export default {
       wx.showToast({ title: 'Please select a tile' });
       return;
     }
-    
+
     let tile = '';
     if (this.data.selectedIndex === 13) {
       tile = this.data.drawTile;
       this.setData({ drawTile: '' });
     } else {
       tile = this.data.hand[this.data.selectedIndex];
-      // In a real app we'd update the array, but since no for-loop, 
+      // In a real app we'd update the array, but since no for-loop,
       // we just simulate the UI change
     }
 

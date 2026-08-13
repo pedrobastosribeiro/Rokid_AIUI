@@ -1,4 +1,5 @@
 node_modules/
+*.aix
 
 .trae/specs/
 .trae/documents/

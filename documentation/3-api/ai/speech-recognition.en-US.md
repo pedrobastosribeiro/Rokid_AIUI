@@ -17,7 +17,6 @@ Speech recognition is based on `SpeechRecognition`:
 
 ```javascript
 const recognition = new SpeechRecognition();
-recognition.lang = 'pt-BR';
 ```
 
 ## Basic Usage

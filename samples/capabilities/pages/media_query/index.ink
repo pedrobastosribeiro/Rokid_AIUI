@@ -100,7 +100,7 @@ export default {
   background-color: var(--media-query-responsive-default-background);
   border-radius: var(--radius-sm, 8px);
   transition: all 0.3s ease;
-  
+
   /* Default: Desktop size */
   width: 300px;
   height: 200px;
@@ -189,7 +189,7 @@ export default {
     height: 100px;
     background-color: var(--media-query-mobile-background);
   }
-  
+
   .box-text {
     font-size: 12px;
   }

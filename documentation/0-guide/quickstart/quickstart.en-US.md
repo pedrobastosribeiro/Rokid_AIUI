@@ -27,7 +27,7 @@ ls # List the files and subfolders in the current folder
 
 ![image.png](../../image/quickstart.en-us/image%203.png)
 
-2.Import an AIUI project from a local folder, a local .aix file, or a GitHub subdirectory
+2.Import an AIUI project from a local folder, a local .aix file, or a GitHub subdirectory. Craft treats everything after `/tree/` as one git ref, so a URL like `/tree/main/samples/pt-br` fails. For the pt-BR glasses agent, paste `https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-craft-e686` instead.
 
 ![image.png](../../image/quickstart.en-us/image%204.png)
 
