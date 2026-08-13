@@ -19,17 +19,30 @@
 <script setup>
 import {
   COPY,
+  TARGET_LOCALE,
   getHostLanguage,
   getLanguageModelOptions,
-  getSpeechLang,
   isPortuguese,
 } from '../../lib/locale.js';
+
+// The HUD is 480 x 352 px, and WXSS confirms neither `overflow` nor
+// `max-height`, so text is clamped before it reaches the view. The full text
+// is still sent to the model and to TTS.
+const MAX_HUD_CHARS = 220;
 
 function normalizeText(value) {
   if (typeof value !== 'string') {
     return '';
   }
   return value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function clampForHud(value) {
+  const text = normalizeText(value);
+  if (text.length <= MAX_HUD_CHARS) {
+    return text;
+  }
+  return `${text.slice(0, MAX_HUD_CHARS - 1).trimEnd()}…`;
 }
 
 function getErrorMessage(error) {
@@ -40,6 +53,20 @@ function getErrorMessage(error) {
     return error;
   }
   return error.message || error.errMsg || String(error);
+}
+
+// A `SpeechRecognitionErrorEvent` carries its diagnostic in `error`, not in
+// `message`, so `getErrorMessage()` would stringify the event object here.
+function getRecognitionErrorMessage(event) {
+  const code = event && typeof event.error === 'string' ? event.error : '';
+  const detail = event && typeof event.message === 'string' ? event.message : '';
+  if (code && detail) {
+    return `${COPY.recognitionFailed} (${code}: ${detail})`;
+  }
+  if (code) {
+    return `${COPY.recognitionFailed} (${code})`;
+  }
+  return COPY.recognitionFailed;
 }
 
 function extractTranscript(event) {
@@ -82,7 +109,7 @@ export default {
     title: COPY.title,
     status: COPY.idle,
     hostLanguage: '',
-    speechLang: getSpeechLang(),
+    speechLang: TARGET_LOCALE,
     hostIsPortuguese: false,
     llmAvailable: false,
     asrAvailable: false,
@@ -95,6 +122,7 @@ export default {
     stopButton: COPY.stopButton,
     replayButton: COPY.replayButton,
     ttsLangHint: COPY.ttsLangHint,
+    inputHint: COPY.inputHint,
   },
 
   async onLoad(query) {
@@ -102,6 +130,8 @@ export default {
     this.session = null;
     this.recognition = null;
     this.finalTranscript = '';
+    this.latestTranscript = '';
+    this.lastReplyText = COPY.greeting;
     this.recognitionFailed = false;
     this.promptInFlight = false;
     this.turnId = 0;
@@ -111,7 +141,7 @@ export default {
     this.setData({
       hostLanguage: hostLanguage || '(host não informou)',
       hostIsPortuguese: isPortuguese(hostLanguage),
-      speechLang: getSpeechLang(),
+      speechLang: TARGET_LOCALE,
       asrAvailable: typeof SpeechRecognition !== 'undefined',
       ttsAvailable:
         typeof speechSynthesis !== 'undefined' &&
@@ -119,13 +149,16 @@ export default {
     });
 
     await this.refreshAvailability();
-    if (!this.pageActive) {
+    // A temple-button press or a voice wakeup can open a turn while the
+    // availability round trip above is still pending. Only one request may be
+    // active per session, so the query prompt yields to a turn already running.
+    if (!this.pageActive || this.data.isBusy || this.promptInFlight) {
       return;
     }
 
     const initialPrompt = normalizeText(query && query.prompt);
     if (initialPrompt) {
-      this.setData({ liveTranscript: initialPrompt });
+      this.setData({ liveTranscript: clampForHud(initialPrompt) });
       await this.answerPrompt(initialPrompt);
     }
   },
@@ -136,7 +169,11 @@ export default {
     this.promptInFlight = false;
     this.cancelRecognition({ discarded: true });
     if (this.session && typeof this.session.destroy === 'function') {
-      this.session.destroy();
+      try {
+        this.session.destroy();
+      } catch (_) {
+        // The host may already have reclaimed the session.
+      }
     }
     this.session = null;
   },
@@ -150,6 +187,7 @@ export default {
     this.activeTurnId = this.turnId;
     this.recognitionFailed = false;
     this.finalTranscript = '';
+    this.latestTranscript = '';
     return this.activeTurnId;
   },
 
@@ -160,13 +198,18 @@ export default {
   },
 
   onKeyUp(event) {
-    if (event.code === 'Enter' || event.code === 'GlobalHook') {
-      event.preventDefault();
-      if (this.data.isBusy) {
-        this.stopTalk();
-      } else {
-        this.startTalk();
-      }
+    // `Enter` is left to the host on purpose: its default behavior is to enter
+    // navigation mode or activate the focused target, which is the only way to
+    // reach the buttons below on a device with no touchscreen. The temple
+    // button (`GlobalHook`) has no host default, so it drives the voice loop.
+    if (event.code !== 'GlobalHook') {
+      return;
+    }
+    event.preventDefault();
+    if (this.data.isBusy) {
+      this.stopTalk();
+    } else {
+      this.startTalk();
     }
   },
 
@@ -233,7 +276,7 @@ export default {
     });
 
     const recognition = new SpeechRecognition();
-    recognition.lang = getSpeechLang();
+    recognition.lang = TARGET_LOCALE;
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -243,7 +286,8 @@ export default {
         return;
       }
       const { transcript, hasFinal } = extractTranscript(event);
-      this.setData({ liveTranscript: transcript });
+      this.latestTranscript = transcript;
+      this.setData({ liveTranscript: clampForHud(transcript) });
       if (hasFinal && transcript) {
         this.finalTranscript = transcript;
       }
@@ -254,8 +298,15 @@ export default {
         return;
       }
       this.recognitionFailed = true;
+      // The host is not guaranteed to emit `end` after `error`, so the turn is
+      // released here instead of relying on `onend` to unstick the page.
+      if (this.recognition === recognition) {
+        this.recognition = null;
+      }
       this.setData({
-        lastError: getErrorMessage(event) || 'Falha no reconhecimento de fala. Tente de novo.',
+        isBusy: false,
+        status: COPY.idle,
+        lastError: getRecognitionErrorMessage(event),
       });
     };
 
@@ -273,7 +324,8 @@ export default {
         });
         return;
       }
-      const transcript = this.finalTranscript || normalizeText(this.data.liveTranscript);
+      // `liveTranscript` is clamped for the HUD; use the unclamped capture.
+      const transcript = this.finalTranscript || this.latestTranscript;
       if (!transcript) {
         this.setData({
           isBusy: false,
@@ -338,7 +390,7 @@ export default {
     this.setData({
       isBusy: true,
       status: COPY.thinking,
-      liveTranscript: prompt,
+      liveTranscript: clampForHud(prompt),
       lastError: '',
     });
 
@@ -351,12 +403,13 @@ export default {
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
       }
-      this.setData({ lastReply: reply || '(sem texto)' });
-      await this.speakReply(reply);
-      if (!this.isTurnCurrent(currentTurnId)) {
-        return;
-      }
-      this.setData({ isBusy: false, status: COPY.idle });
+      this.lastReplyText = reply;
+      this.setData({ lastReply: clampForHud(reply) || '(sem texto)' });
+      const speaking = this.speakReply(reply);
+      // No utterance lifecycle event is exposed yet, so the turn is released as
+      // soon as playback is dispatched. The HUD stays on "Falando…" until the
+      // next turn replaces it rather than claiming idle over live audio.
+      this.setData({ isBusy: false, status: speaking ? COPY.speaking : COPY.idle });
     } catch (error) {
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
@@ -373,39 +426,41 @@ export default {
     }
   },
 
-  async speakReply(text, options = {}) {
+  // Returns whether playback was dispatched. Host TTS exposes no utterance
+  // lifecycle events, so this never waits for the audio to finish.
+  speakReply(text) {
     const content = normalizeText(text);
-    const restoreIdle = options.restoreIdle === true;
     if (!content) {
-      return;
+      return false;
     }
     if (!this.data.ttsAvailable) {
       this.setData({ lastError: COPY.ttsUnavailable });
-      return;
+      return false;
     }
 
-    this.setData({ status: COPY.speaking });
     try {
       const utterance = new SpeechSynthesisUtterance(content);
-      utterance.lang = getSpeechLang();
+      utterance.lang = TARGET_LOCALE;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      // Host TTS currently dispatches speak() only; do not wait on utterance events.
-      speechSynthesis.speak(utterance);
+      // `speak()` defaults to 'enqueue' and `cancel()` is not exposed yet, so
+      // without 'immediate' every reply and replay stacks behind stale audio.
+      speechSynthesis.speak(utterance, 'immediate');
     } catch (error) {
       this.setData({ lastError: getErrorMessage(error) });
+      return false;
     }
-    if (restoreIdle) {
-      this.setData({ status: COPY.idle });
-    }
+    return true;
   },
 
   replayReply() {
     if (this.data.isBusy || this.promptInFlight) {
       return;
     }
-    this.speakReply(this.data.lastReply, { restoreIdle: true });
+    if (this.speakReply(this.lastReplyText)) {
+      this.setData({ status: COPY.speaking });
+    }
   },
 };
 </script>
@@ -418,7 +473,7 @@ export default {
     </view>
 
     <view class="meta">
-      <text class="meta-line">Host: {{hostLanguage}}</text>
+      <text class="meta-line">Host: {{hostLanguage}} · {{hostIsPortuguese ? 'compatível com pt' : 'não é pt'}}</text>
       <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}}</text>
     </view>
 
@@ -428,7 +483,7 @@ export default {
 
     <view class="panel">
       <text class="label">VOCÊ</text>
-      <text class="body">{{liveTranscript || 'Toque em Falar ou aperte Enter'}}</text>
+      <text class="body">{{liveTranscript || inputHint}}</text>
     </view>
 
     <view class="panel">
@@ -477,12 +532,25 @@ export default {
   color: var(--ink);
 }
 
+.header,
 .meta,
 .panel,
 .status-row {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* The canvas is a fixed 480 x 352 HUD, so the chrome never shrinks; only the
+   transcript and reply panels give up space. Text itself is clamped in JS
+   because WXSS confirms neither `overflow` nor `max-height`. */
+.header,
+.meta,
+.status-row,
+.hint,
+.error,
+.actions {
+  flex-shrink: 0;
 }
 
 .meta-line,
@@ -494,6 +562,7 @@ export default {
 }
 
 .panel {
+  flex-shrink: 1;
   padding: 8px 10px;
   border: 1px solid var(--ink-24);
   background: var(--ink-12);

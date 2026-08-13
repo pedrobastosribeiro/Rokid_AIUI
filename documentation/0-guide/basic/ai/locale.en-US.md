@@ -63,7 +63,7 @@ If on-device TTS stays in the wrong language, use a cloud TTS voice that support
 ## 5. Deploy the pt-BR sample
 
 ```bash
-aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
+aix pack ./samples/pt-br -o pt-br.aix
 ```
 
 Then upload the package in [AIUI Studio Global](https://aiui-global.rokid.com/), update the glasses resource package, and wake the assistant with the agent name.

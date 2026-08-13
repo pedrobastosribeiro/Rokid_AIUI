@@ -63,7 +63,7 @@ speechSynthesis.speak(utterance);
 ## 5. 发布 pt-BR 示例
 
 ```bash
-aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
+aix pack ./samples/pt-br -o pt-br.aix
 ```
 
 然后在 [AIUI Studio Global](https://aiui-global.rokid.com/) 上传安装包，更新眼镜资源包，并用智能体名称唤醒。

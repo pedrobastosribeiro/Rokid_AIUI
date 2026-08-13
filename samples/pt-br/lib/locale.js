@@ -13,6 +13,8 @@ export const COPY = {
   ttsUnavailable: 'Síntese de voz indisponível. A resposta fica só em texto.',
   ttsLangHint:
     'O runtime ainda pode ignorar utterance.lang. O prompt do modelo já força pt-BR.',
+  recognitionFailed: 'Falha no reconhecimento de fala. Tente de novo.',
+  inputHint: 'Toque em Falar ou use o botão da haste',
   speakButton: 'Falar',
   stopButton: 'Parar',
   replayButton: 'Ouvir',
@@ -27,18 +29,6 @@ export function getHostLanguage() {
     // Some hosts expose navigator without language.
   }
   return '';
-}
-
-export function getHostLanguages() {
-  try {
-    if (typeof navigator !== 'undefined' && Array.isArray(navigator.languages)) {
-      return navigator.languages.filter((item) => typeof item === 'string');
-    }
-  } catch (_) {
-    // Ignore hosts that do not expose a language list.
-  }
-  const primary = getHostLanguage();
-  return primary ? [primary] : [];
 }
 
 export function normalizeLocale(tag) {
@@ -59,10 +49,6 @@ export function normalizeLocale(tag) {
 export function isPortuguese(tag) {
   const normalized = normalizeLocale(tag);
   return normalized === 'pt' || normalized.startsWith('pt-');
-}
-
-export function getSpeechLang(preferred = TARGET_LOCALE) {
-  return preferred || TARGET_LOCALE;
 }
 
 export function getSystemPrompt() {
