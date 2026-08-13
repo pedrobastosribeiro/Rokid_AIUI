@@ -130,6 +130,17 @@ function clearRecognitionHandlers(recognition) {
   recognition.onend = null;
 }
 
+function destroySession(session) {
+  if (!session || typeof session.destroy !== 'function') {
+    return;
+  }
+  try {
+    session.destroy();
+  } catch (_) {
+    // The host may already have reclaimed the session.
+  }
+}
+
 export default {
   data: {
     title: COPY.title,
@@ -197,13 +208,9 @@ export default {
     this.activeTurnId += 1;
     this.promptInFlight = false;
     this.cancelRecognition({ discarded: true });
-    if (this.session && typeof this.session.destroy === 'function') {
-      try {
-        this.session.destroy();
-      } catch (_) {
-        // The host may already have reclaimed the session.
-      }
-    }
+    // A session still being created is disposed by ensureSession(), which sees
+    // pageActive false once its create() settles.
+    destroySession(this.session);
     this.session = null;
   },
 
@@ -267,7 +274,17 @@ export default {
     if (!this.data.llmAvailable) {
       throw new Error(COPY.llmUnavailable);
     }
-    this.session = await LanguageModel.create(getLanguageModelOptions());
+
+    const session = await LanguageModel.create(getLanguageModelOptions());
+    if (!this.pageActive) {
+      // The page unloaded while create() was pending, so onUnload saw no
+      // session to destroy. Dispose it here instead of leaking the host
+      // context, and let the caller's turn check drop the request.
+      destroySession(session);
+      throw new Error(COPY.llmUnavailable);
+    }
+
+    this.session = session;
     return this.session;
   },
 
