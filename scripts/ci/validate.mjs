@@ -451,6 +451,10 @@ const checks = {
         // Accepted -- disambiguating needs the GitHub API, and the miss is a
         // branch name nobody picks by accident.
         const ref = target.split('/')[0];
+        // A commit permalink is the most durable link there is, and rejecting
+        // it inverted the point of the rule. A 40-hex ref is a SHA; the short
+        // forms GitHub renders are 7 or more.
+        if (/^[0-9a-f]{7,40}$/.test(ref)) continue; // immutable commit
         if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
         fail(`${file}: "${target}" points at a branch that will not outlive the review`);
       }
