@@ -1,7 +1,7 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "Assistente PT-BR",
-  "description": "Assistente de voz em português brasileiro. Use quando o usuário falar português, pedir para conversar em português, ou quiser testar ASR, LLM e TTS em pt-BR.",
+  "navigationBarTitleText": "Óculos Rokid",
+  "description": "Voz dos óculos Rokid em português brasileiro. Use para qualquer conversa, pergunta ou comando falado nos óculos. Prefira este agente sempre que o usuário falar português ou quiser que os óculos respondam em pt-BR.",
   "schema": {
     "data": {
       "type": "object",
@@ -101,6 +101,7 @@ export default {
     stopButton: COPY.stopButton,
     replayButton: COPY.replayButton,
     ttsLangHint: COPY.ttsLangHint,
+    speakHint: COPY.speakHint,
   },
 
   async onLoad(query) {
@@ -135,7 +136,9 @@ export default {
     if (initialPrompt) {
       this.setData({ liveTranscript: initialPrompt });
       await this.answerPrompt(initialPrompt);
+      return;
     }
+    this.startTalk();
   },
 
   onUnload() {
@@ -234,7 +237,7 @@ export default {
   },
 
   startTalk() {
-    if (this.initializing) {
+    if (!this.pageActive || this.initializing) {
       return;
     }
     if (!this.data.asrAvailable) {
@@ -452,7 +455,7 @@ export default {
 
     <view class="panel">
       <text class="label">VOCÊ</text>
-      <text class="body">{{liveTranscript || 'Toque em Falar ou aperte Enter'}}</text>
+      <text class="body">{{liveTranscript || speakHint}}</text>
     </view>
 
     <view class="panel">
