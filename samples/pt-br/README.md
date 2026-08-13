@@ -41,6 +41,8 @@ The page also prints `navigator.language` so you can compare the **host language
    - model reply language
    - spoken reply (if the host TTS honors `lang`)
 
+From the repository root, `npm test` runs locale unit tests, sample structure checks, and `aix pack`.
+
 On the glasses:
 
 1. In Hi Rokid, set the app language to Portuguese (G1.9.9+)
