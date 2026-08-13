@@ -19,6 +19,7 @@
 <script setup>
 import {
   COPY,
+  getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
   getSpeechLang,
@@ -203,8 +204,15 @@ export default {
     if (!this.data.llmAvailable) {
       throw new Error(COPY.llmUnavailable);
     }
-    this.session = await LanguageModel.create(getLanguageModelOptions());
-    return this.session;
+    const session = await LanguageModel.create(getLanguageModelOptions());
+    if (!this.pageActive) {
+      if (session && typeof session.destroy === 'function') {
+        session.destroy();
+      }
+      throw new Error('Page unloaded');
+    }
+    this.session = session;
+    return session;
   },
 
   cancelRecognition(options = {}) {
@@ -269,7 +277,7 @@ export default {
       }
       this.recognitionFailed = true;
       this.setData({
-        lastError: getErrorMessage(event) || 'Falha no reconhecimento de fala. Tente de novo.',
+        lastError: getAsrFailureMessage(event),
       });
     };
 
@@ -309,7 +317,7 @@ export default {
       this.setData({
         isBusy: false,
         status: COPY.idle,
-        lastError: getErrorMessage(error),
+        lastError: getAsrFailureMessage(error),
       });
     }
   },
@@ -452,7 +460,9 @@ export default {
       <text class="body">{{lastReply}}</text>
     </view>
 
-    <text class="error" ink:if="{{lastError}}">{{lastError}}</text>
+    <view class="error" ink:if="{{lastError}}">
+      <text class="error-text">{{lastError}}</text>
+    </view>
     <text class="hint">{{ttsLangHint}}</text>
 
     <view class="actions" role="navigation">
@@ -502,8 +512,7 @@ export default {
 }
 
 .meta-line,
-.hint,
-.error {
+.hint {
   font-size: 11px;
   line-height: 1.35;
   color: var(--ink-48);
@@ -537,6 +546,13 @@ export default {
 }
 
 .error {
+  max-height: 2.8em;
+  overflow: hidden;
+}
+
+.error-text {
+  font-size: 11px;
+  line-height: 1.35;
   color: var(--ink);
 }
 
