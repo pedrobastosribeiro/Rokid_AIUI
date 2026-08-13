@@ -153,8 +153,8 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
   }
 
   const api = speechSynthesisApi();
-  pendingVoices = new Promise((resolve) => {
-    let settled = false;
+  let settled = false;
+  const waiting = new Promise((resolve) => {
     let timer = null;
     let poll = null;
     const finish = () => {
@@ -176,11 +176,6 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
       } catch (_) {
         // Nothing to detach.
       }
-      // Only ever a handle on a wait in flight, so that concurrent callers
-      // share one. Clearing it here means a populated registry is answered by
-      // the fast path above, and timing out empty is not cached as a permanent
-      // "this host has no voices".
-      pendingVoices = null;
       resolve(listHostVoices());
     };
 
@@ -229,7 +224,19 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
     timer = setTimeout(finish, timeoutMs);
   });
 
-  return pendingVoices;
+  // `pendingVoices` is only ever a handle on a wait in flight, so concurrent
+  // callers share one. It has to be decided *after* construction: finish() can
+  // run synchronously inside the executor above, and assigning over that would
+  // resurrect a settled promise as a permanent cache -- a later call would
+  // then reuse a stale answer instead of waiting again.
+  pendingVoices = settled ? null : waiting;
+  waiting.then(() => {
+    if (pendingVoices === waiting) {
+      pendingVoices = null;
+    }
+  });
+
+  return waiting;
 }
 
 export function applyPortugueseSpeech(utterance) {

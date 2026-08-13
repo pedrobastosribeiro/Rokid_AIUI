@@ -237,3 +237,32 @@ test('keeps waiting when the host publishes English before Portuguese', async ()
     assert.equal(pickPortugueseVoice(resolved).name, 'Luciana');
   });
 });
+
+test('does not cache a settled result across a registry reset', async () => {
+  // finish() can run synchronously inside the Promise constructor. If the
+  // assignment afterwards overwrote that cleanup, the resolved promise would
+  // stay cached and a later call would reuse it instead of waiting again.
+  let voices = [{ lang: 'pt-BR', name: 'Luciana' }];
+  const stub = {
+    // Force the synchronous-settlement path: empty on the first read that
+    // guards the fast path, populated on the re-read inside the executor.
+    getVoices() {
+      const current = voices;
+      voices = [{ lang: 'pt-BR', name: 'Luciana' }];
+      return current;
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  voices = [];
+
+  await withSpeechSynthesis(stub, async () => {
+    assert.equal(pickPortugueseVoice(await ensureVoicesReady(500)).name, 'Luciana');
+  });
+
+  // Registry gone: a fresh call must wait and time out, not replay the above.
+  const empty = { getVoices: () => [], addEventListener() {}, removeEventListener() {} };
+  await withSpeechSynthesis(empty, async () => {
+    assert.deepEqual(await ensureVoicesReady(20), []);
+  });
+});
