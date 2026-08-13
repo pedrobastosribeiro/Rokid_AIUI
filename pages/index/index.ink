@@ -68,6 +68,15 @@ function extractTranscript(event) {
   };
 }
 
+function clearRecognitionHandlers(recognition) {
+  if (!recognition) {
+    return;
+  }
+  recognition.onresult = null;
+  recognition.onerror = null;
+  recognition.onend = null;
+}
+
 export default {
   data: {
     title: COPY.title,
@@ -89,9 +98,14 @@ export default {
   },
 
   async onLoad(query) {
+    this.pageActive = true;
     this.session = null;
     this.recognition = null;
     this.finalTranscript = '';
+    this.recognitionFailed = false;
+    this.promptInFlight = false;
+    this.turnId = 0;
+    this.activeTurnId = 0;
 
     const hostLanguage = getHostLanguage();
     this.setData({
@@ -114,11 +128,26 @@ export default {
   },
 
   onUnload() {
-    this.cancelRecognition();
+    this.pageActive = false;
+    this.activeTurnId += 1;
+    this.promptInFlight = false;
+    this.cancelRecognition({ discarded: true });
     if (this.session && typeof this.session.destroy === 'function') {
       this.session.destroy();
     }
     this.session = null;
+  },
+
+  isTurnCurrent(turnId) {
+    return this.pageActive === true && turnId === this.activeTurnId;
+  },
+
+  beginTurn() {
+    this.turnId += 1;
+    this.activeTurnId = this.turnId;
+    this.recognitionFailed = false;
+    this.finalTranscript = '';
+    return this.activeTurnId;
   },
 
   onVoiceWakeup() {
@@ -164,16 +193,22 @@ export default {
     return this.session;
   },
 
-  cancelRecognition() {
-    if (!this.recognition) {
+  cancelRecognition(options = {}) {
+    const recognition = this.recognition;
+    if (!recognition) {
       return;
     }
+    if (options.discarded) {
+      this.recognitionFailed = true;
+    }
+    // Detach first so a host `end` after `abort()` cannot submit a stale turn.
+    clearRecognitionHandlers(recognition);
+    this.recognition = null;
     try {
-      this.recognition.abort();
+      recognition.abort();
     } catch (_) {
       // The host may already have closed the session.
     }
-    this.recognition = null;
   },
 
   startTalk() {
@@ -181,12 +216,12 @@ export default {
       this.setData({ lastError: COPY.asrUnavailable });
       return;
     }
-    if (this.data.isBusy) {
+    if (this.data.isBusy || this.promptInFlight) {
       return;
     }
 
-    this.cancelRecognition();
-    this.finalTranscript = '';
+    this.cancelRecognition({ discarded: true });
+    const turnId = this.beginTurn();
     this.setData({
       isBusy: true,
       status: COPY.listening,
@@ -201,6 +236,9 @@ export default {
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
+      if (!this.isTurnCurrent(turnId)) {
+        return;
+      }
       const { transcript, hasFinal } = extractTranscript(event);
       this.setData({ liveTranscript: transcript });
       if (hasFinal && transcript) {
@@ -209,13 +247,29 @@ export default {
     };
 
     recognition.onerror = (event) => {
+      if (!this.isTurnCurrent(turnId)) {
+        return;
+      }
+      this.recognitionFailed = true;
       this.setData({
-        lastError: getErrorMessage(event) || 'Falha no reconhecimento de fala.',
+        lastError: getErrorMessage(event) || 'Falha no reconhecimento de fala. Tente de novo.',
       });
     };
 
     recognition.onend = async () => {
-      this.recognition = null;
+      if (this.recognition === recognition) {
+        this.recognition = null;
+      }
+      if (!this.isTurnCurrent(turnId)) {
+        return;
+      }
+      if (this.recognitionFailed) {
+        this.setData({
+          isBusy: false,
+          status: COPY.idle,
+        });
+        return;
+      }
       const transcript = this.finalTranscript || normalizeText(this.data.liveTranscript);
       if (!transcript) {
         this.setData({
@@ -225,13 +279,15 @@ export default {
         });
         return;
       }
-      await this.answerPrompt(transcript);
+      await this.answerPrompt(transcript, turnId);
     };
 
     this.recognition = recognition;
     try {
       recognition.start();
     } catch (error) {
+      this.recognitionFailed = true;
+      clearRecognitionHandlers(recognition);
       this.recognition = null;
       this.setData({
         isBusy: false,
@@ -246,24 +302,36 @@ export default {
       try {
         this.recognition.stop();
       } catch (_) {
-        this.cancelRecognition();
+        this.cancelRecognition({ discarded: true });
+        this.setData({
+          isBusy: false,
+          status: COPY.idle,
+        });
       }
+      return;
+    }
+    // A model request cannot be cancelled; keep the turn busy until it settles.
+    if (this.promptInFlight) {
       return;
     }
     this.setData({ isBusy: false, status: COPY.idle });
   },
 
-  async answerPrompt(text) {
+  async answerPrompt(text, turnId) {
     const prompt = normalizeText(text);
+    const currentTurnId = turnId == null ? this.beginTurn() : turnId;
     if (!prompt) {
-      this.setData({
-        isBusy: false,
-        status: COPY.idle,
-        lastError: COPY.emptyTranscript,
-      });
+      if (this.isTurnCurrent(currentTurnId)) {
+        this.setData({
+          isBusy: false,
+          status: COPY.idle,
+          lastError: COPY.emptyTranscript,
+        });
+      }
       return;
     }
 
+    this.promptInFlight = true;
     this.setData({
       isBusy: true,
       status: COPY.thinking,
@@ -273,21 +341,38 @@ export default {
 
     try {
       const session = await this.ensureSession();
+      if (!this.isTurnCurrent(currentTurnId)) {
+        return;
+      }
       const reply = normalizeText(await session.prompt(prompt));
+      if (!this.isTurnCurrent(currentTurnId)) {
+        return;
+      }
       this.setData({ lastReply: reply || '(sem texto)' });
       await this.speakReply(reply);
+      if (!this.isTurnCurrent(currentTurnId)) {
+        return;
+      }
       this.setData({ isBusy: false, status: COPY.idle });
     } catch (error) {
+      if (!this.isTurnCurrent(currentTurnId)) {
+        return;
+      }
       this.setData({
         isBusy: false,
         status: COPY.idle,
         lastError: getErrorMessage(error),
       });
+    } finally {
+      if (this.isTurnCurrent(currentTurnId)) {
+        this.promptInFlight = false;
+      }
     }
   },
 
-  async speakReply(text) {
+  async speakReply(text, options = {}) {
     const content = normalizeText(text);
+    const restoreIdle = options.restoreIdle === true;
     if (!content) {
       return;
     }
@@ -308,12 +393,16 @@ export default {
     } catch (error) {
       this.setData({ lastError: getErrorMessage(error) });
     }
+    if (restoreIdle) {
+      this.setData({ status: COPY.idle });
+    }
   },
 
   replayReply() {
-    if (!this.data.isBusy) {
-      this.speakReply(this.data.lastReply);
+    if (this.data.isBusy || this.promptInFlight) {
+      return;
     }
+    this.speakReply(this.data.lastReply, { restoreIdle: true });
   },
 };
 </script>
