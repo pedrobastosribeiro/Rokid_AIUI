@@ -28,15 +28,13 @@ At the moment, the repository includes:
 - [`samples/capabilities/`](./samples/capabilities/): a complete sample app for page structure, assets, helper modules, and feature demos
 - [`samples/pt-br/`](./samples/pt-br/): the glasses' Brazilian Portuguese voice loop (Hi Rokid system language + ASR, LLM prompt, and TTS `lang` pinned to `pt-BR`)
 
-- `pages/`: Example pages covering a range of AIUI capabilities and UI patterns.
-- `assets/`: Static resources used by the demos, such as images, SVGs, and audio files.
-- `lib/`: Helper modules shared by sample pages.
+To try the pt-BR glasses voice loop in Craft Global, import the publish branch below. Craft treats everything after `/tree/` as a single git ref, so importing `/tree/main/samples/pt-br` fails:
 
-Representative demos inside `samples/simple/pages/` include:
-- `layout`, `grid`, `position`: Layout and positioning patterns.
-- `image`, `list`, `input_textarea`: Common UI building blocks.
-- `canvas`, `canvas_api`, `chart`, `lottie`: Rendering and visual content examples.
-- `media_query`, `css_vars`, `filter`, `transform`: Styling and responsive behavior examples.
+```text
+https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/pt-br
+```
+
+Open [Craft Global](https://js.rokid.com/craft?region=global), paste the URL, and click **Run Agent**. The branch root already contains `app.json`; do not merge `pt-br` into `main`. See [`samples/pt-br/README.md`](./samples/pt-br/README.md) and [`samples/pt-br/CRAFT.md`](./samples/pt-br/CRAFT.md) for language setup, packaging, and deployment.
 
 ## 📚 Documentation
 
@@ -105,7 +103,14 @@ If you'd like to request a feature or report a bug, please use the GitHub issue 
 ├── packages/
 │   └── create-aiui-agent/    # npm CLI for scaffolding AIUI agent projects
 ├── samples/
-│   └── capabilities/         # runnable AIUI capabilities app and feature demos
+│   ├── bluetooth/            # Bluetooth sample
+│   ├── capabilities/         # runnable AIUI capabilities app and feature demos
+│   ├── cut-card/             # card-cutting sample
+│   ├── games/                # games sample
+│   ├── meal-card/            # meal-card sample
+│   ├── pt-br/                # Brazilian Portuguese glasses voice loop
+│   ├── scanner/              # camera and barcode scanning sample
+│   └── tts/                  # text-to-speech sample
 ├── skills/
 │   └── aiui-dev/             # AI Agent skill documentation (SKILL.md)
 └── .github/workflows/        # Automated daily build and publish workflows

@@ -28,15 +28,13 @@ npm create @yodaos-pkg/aiui-agent my-agent
 - [`samples/capabilities/`](./samples/capabilities/)：完整示例应用，集中了解页面结构、静态资源、辅助模块以及多个功能演示
 - [`samples/pt-br/`](./samples/pt-br/)：眼镜的巴西葡萄牙语语音循环（Hi Rokid 系统语言 + ASR、LLM 提示词和 TTS `lang` 固定为 `pt-BR`）
 
-- `pages/`：包含多种 AIUI 能力与 UI 模式的页面示例
-- `assets/`：示例中使用的静态资源，例如图片、SVG 和音频文件
-- `lib/`：供示例页面复用的辅助模块
+要在 Craft Global 中试用 pt-BR 眼镜语音循环，请导入下面的发布分支。Craft 会把 `/tree/` 之后的全部内容当成一个 git ref，因此导入 `/tree/main/samples/pt-br` 会失败：
 
-`samples/simple/pages/` 中具有代表性的示例包括：
-- `layout`、`grid`、`position`：布局与定位相关示例
-- `image`、`list`、`input_textarea`：常见 UI 基础能力示例
-- `canvas`、`canvas_api`、`chart`、`lottie`：绘制与视觉内容示例
-- `media_query`、`css_vars`、`filter`、`transform`：样式与响应式行为示例
+```text
+https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/pt-br
+```
+
+打开 [Craft Global](https://js.rokid.com/craft?region=global)，粘贴该 URL 并点击 **Run Agent**。该分支根目录已经包含 `app.json`，不要把 `pt-br` 合并进 `main`。语言设置、打包和部署详情请参阅 [`samples/pt-br/README.md`](./samples/pt-br/README.md) 与 [`samples/pt-br/CRAFT.md`](./samples/pt-br/CRAFT.md)。
 
 ## 📚 文档
 
@@ -105,7 +103,14 @@ npx skills add https://github.com/jsar-project/AIUI/tree/v0.1.0/skills/aiui-dev
 ├── packages/
 │   └── create-aiui-agent/    # 用于创建 AIUI Agent 项目的 npm CLI
 ├── samples/
-│   └── capabilities/         # 可运行的 AIUI capabilities 应用与功能演示
+│   ├── bluetooth/            # Bluetooth 示例
+│   ├── capabilities/         # 可运行的 AIUI capabilities 应用与功能演示
+│   ├── cut-card/             # 切卡示例
+│   ├── games/                # 游戏示例
+│   ├── meal-card/            # 餐卡示例
+│   ├── pt-br/                # 巴西葡萄牙语眼镜语音循环
+│   ├── scanner/              # 摄像头与条码扫描示例
+│   └── tts/                  # 文本转语音示例
 ├── skills/
 │   └── aiui-dev/             # AI Agent 技能文档（SKILL.md）
 └── .github/workflows/        # 自动化每日构建与发布工作流
