@@ -33,6 +33,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # `main`, not the triggering commit. A re-run keeps the original
+          # GITHUB_SHA, and workflow_dispatch can be launched from any ref --
+          # so splitting what the event pointed at would let the remediation
+          # this workflow recommends roll pt-br *backwards* to an older sample
+          # and then verify that rollback as a success. The branch's contract
+          # is "whatever samples/pt-br is on main right now", so publish that
+          # and every run converges on the same answer.
+          ref: main
           fetch-depth: 0
 
       - name: Split and force-push the Craft branch
@@ -42,6 +50,7 @@ jobs:
             echo "::error::samples/pt-br does not exist, so the split below cannot run and refs/heads/pt-br will keep serving the old sample. Move --prefix here, and update every place that documents the import URL in the same change: git grep -n 'tree/pt-br'"
             exit 1
           fi
+          echo "publishing samples/pt-br as of main $(git rev-parse HEAD)"
           git subtree split --prefix=samples/pt-br -b pt-br-craft-split
           git push --force origin pt-br-craft-split:refs/heads/pt-br
 
@@ -73,5 +82,5 @@ jobs:
             echo "https://github.com/${{ github.repository }}/tree/pt-br"
             echo '```'
             echo ""
-            echo "Verified: the branch carries tree \`$got\`."
+            echo "Published \`samples/pt-br\` as of main \`$(git rev-parse HEAD)\`; the branch carries tree \`$got\`."
           } >> "$GITHUB_STEP_SUMMARY"
