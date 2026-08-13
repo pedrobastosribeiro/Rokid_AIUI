@@ -47,5 +47,5 @@ speechSynthesis.speak(utterance);
 
 - **[语音识别](/AIUI/guide/basic-ai-asr)**：查看如何把用户语音转为文本。
 - **[大语言模型](/AIUI/guide/basic-ai-llm)**：查看如何生成可播报的回复内容。
-- **[语音智能体本地化](/AIUI/guide/basic-ai-locale)**：查看如何把智能体切到 `pt-BR` 等语言。
+- **[眼镜语言（pt-BR）](/AIUI/guide/basic-ai-locale)**：查看如何把智能体切到 `pt-BR` 等语言。
 - **[语音播报 (API 参考)](/AIUI/api/ai-speech-synthesis)**：查看完整 API 参考文档。

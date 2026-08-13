@@ -124,5 +124,5 @@ const result = await session.prompt('帮我查询一下杭州今天天气');
 
 - **[Speech Recognition](/AIUI/guide/basic-ai-asr)**: See how to convert the user's voice input into text for the model.
 - **[Speech Synthesis](/AIUI/guide/basic-ai-tts)**: See how to speak the model's reply back to the user.
-- **[Localizing Voice Agents](/AIUI/guide/basic-ai-locale)**: See how to keep ASR, prompts, and TTS in a language such as `pt-BR`.
+- **[Glasses language (pt-BR)](/AIUI/guide/basic-ai-locale)**: See how to keep ASR, prompts, and TTS in a language such as `pt-BR`.
 - **[Large Language Model (API Reference)](/AIUI/api/ai-language-model)**: See the complete API reference.

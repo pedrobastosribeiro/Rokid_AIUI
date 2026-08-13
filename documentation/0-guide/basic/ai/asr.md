@@ -48,5 +48,5 @@ recognition.start();
 
 - **[语音播报](/AIUI/guide/basic-ai-tts)**：查看如何把结果播报给用户。
 - **[大语言模型](/AIUI/guide/basic-ai-llm)**：查看如何把识别结果交给模型处理。
-- **[语音智能体本地化](/AIUI/guide/basic-ai-locale)**：查看如何把智能体切到 `pt-BR` 等语言。
+- **[眼镜语言（pt-BR）](/AIUI/guide/basic-ai-locale)**：查看如何把智能体切到 `pt-BR` 等语言。
 - **[语音识别 (API 参考)](/AIUI/api/ai-speech-recognition)**：查看完整 API 参考文档。

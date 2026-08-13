@@ -26,7 +26,7 @@ npm create @yodaos-pkg/aiui-agent my-agent
 当前仓库内提供了：
 
 - [`samples/capabilities/`](./samples/capabilities/)：完整示例应用，集中了解页面结构、静态资源、辅助模块以及多个功能演示
-- [`samples/pt-br/`](./samples/pt-br/)：巴西葡萄牙语语音智能体，把 ASR、LLM 系统提示词和 TTS `lang` 固定为 `pt-BR`
+- [`samples/pt-br/`](./samples/pt-br/)：眼镜的巴西葡萄牙语语音循环（Hi Rokid 系统语言 + ASR、LLM 提示词和 TTS `lang` 固定为 `pt-BR`）
 
 - `pages/`：包含多种 AIUI 能力与 UI 模式的页面示例
 - `assets/`：示例中使用的静态资源，例如图片、SVG 和音频文件

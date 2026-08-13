@@ -5,7 +5,8 @@
   "description": "AIUI is a *JavaScript User Interface* agentic runtime designed for the AI glasses with Display. It empowers developers to build intelligent, interactive, and context-aware agents with GUI seamlessly.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/locale.test.js && node scripts/ci-check.mjs",
+    "pack:pt-br": "npx --yes @yodaos-pkg/aix-cli@0.8.2 pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'"
   },
   "repository": {
     "type": "git",

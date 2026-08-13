@@ -1,14 +1,21 @@
-# Localizing a Voice Agent (pt-BR)
+# Glasses language (pt-BR)
 
-AIUI does not install a firmware language pack. To talk with the glasses in a language such as Brazilian Portuguese, configure **three separate layers**: the host app language, speech input/output, and the model prompt.
+AIUI does not install a firmware language pack. To make the **glasses** communicate in Brazilian Portuguese — not only a specialty assistant — configure **four layers**: the Hi Rokid system language, speech input, the model prompt, and speech output.
 
-This page uses **`pt-BR`** as the first localization to deploy. A runnable implementation lives in [`samples/pt-br`](https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/main/samples/pt-br).
+A runnable glasses voice loop lives in [`samples/pt-br`](../../../../samples/pt-br).
 
-## 1. Host language
+## 1. Glasses system language (required)
 
-The companion app (Hi Rokid) owns the runtime locale. From G1.9.9 it includes Portuguese UI and region settings.
+The companion app (Hi Rokid) owns menus, HUD chrome, region, and the built-in assistant. From G1.9.9 it includes Portuguese UI.
 
-The agent can read that locale, but cannot replace it:
+On the paired phone:
+
+1. Update Hi Rokid to G1.9.9 or later.
+2. Open **Language settings** and choose **Português**.
+3. Set **region** when the app offers it.
+4. Check for glasses firmware updates so the HUD follows the app language.
+
+An AIUI agent can read that locale, but cannot replace it:
 
 ```javascript
 const language = navigator.language;
@@ -16,7 +23,7 @@ const languages = navigator.languages;
 const region = navigator.region;
 ```
 
-Use these values for copy fallback. Do not assume they are `pt-BR` until the user has changed the app language.
+Use these values for copy fallback. Until the user changes the app language, `navigator.language` may still be English or Chinese even if your agent replies in pt-BR.
 
 ## 2. Speech recognition
 
@@ -32,7 +39,7 @@ If the host ASR has no Portuguese model, recognition may still return another la
 
 ## 3. Model replies
 
-Force the reply language in `AGENTS.md` and in `LanguageModel` `initialPrompts`. This is the most reliable pt-BR switch today:
+Force the reply language in `AGENTS.md` and in `LanguageModel` `initialPrompts`. This is the most reliable pt-BR switch inside an AIUI agent. Treat the model as the glasses' voice, not as a separate app:
 
 ```javascript
 const session = await LanguageModel.create({
@@ -40,7 +47,7 @@ const session = await LanguageModel.create({
     {
       role: 'system',
       content:
-        'Você é um assistente de voz nos óculos Rokid. Responda sempre em português brasileiro (pt-BR). Seja curto.',
+        'Você é a voz dos óculos Rokid. Fale sempre em português brasileiro (pt-BR). Seja curto.',
     },
   ],
 });
@@ -60,13 +67,13 @@ speechSynthesis.speak(utterance);
 
 If on-device TTS stays in the wrong language, use a cloud TTS voice that supports pt-BR. See the [Minimax TTS sample](https://github.com/jsar-project/AIUI/tree/main/samples/tts).
 
-## 5. Deploy the pt-BR sample
+## 5. Deploy the glasses voice loop
 
 ```bash
-aix pack ./samples/pt-br -o pt-br.aix
+aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-Then upload the package in [AIUI Studio Global](https://aiui-global.rokid.com/), update the glasses resource package, and wake the assistant with the agent name.
+Then upload the package in [AIUI Studio Global](https://aiui-global.rokid.com/), update the glasses resource package, and speak Portuguese. Name the Studio application as the glasses voice (for example **Óculos Rokid**), not as a specialty assistant.
 
 ## Continue Reading
 

@@ -27,4 +27,4 @@ User speaks → Speech recognition → Text input → Large language model → T
 - **[Speech Recognition](/AIUI/guide/basic-ai-asr)**: Learn how to capture user speech and receive recognition results.
 - **[Speech Synthesis](/AIUI/guide/basic-ai-tts)**: Learn how to synthesize text into spoken audio.
 - **[Large Language Model](/AIUI/guide/basic-ai-llm)**: Learn how to create model sessions, request replies, and read streaming output.
-- **[Localizing Voice Agents](/AIUI/guide/basic-ai-locale)**: Learn how to target a language such as Brazilian Portuguese.
+- **[Glasses language (pt-BR)](/AIUI/guide/basic-ai-locale)**: Learn how to make the glasses communicate in Brazilian Portuguese.
