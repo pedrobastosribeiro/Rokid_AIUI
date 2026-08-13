@@ -55,7 +55,7 @@ export default {
 
 card {
   width: 80%;
-  margin-top: 
+  margin-top:
 }
 
 .title {

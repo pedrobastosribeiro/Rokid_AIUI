@@ -8,7 +8,7 @@
 //   node scripts/ci/validate.mjs            # every check
 //   node scripts/ci/validate.mjs json links # only the named checks
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
@@ -98,6 +98,11 @@ function moduleType(file) {
     dir = dirname(dir);
   }
 }
+
+// Pinned so a CLI release cannot change what CI means without a commit.
+const AIX_CLI = '@yodaos-pkg/aix-cli@0.8.2';
+const runAix = (args) =>
+  spawnSync('npx', ['--yes', AIX_CLI, ...args], { cwd: REPO_ROOT, encoding: 'utf8' });
 
 const SCRATCH = mkdtempSync(join(tmpdir(), 'aiui-ci-'));
 let scratchSeq = 0;
@@ -276,6 +281,95 @@ const checks = {
     );
   },
 
+  // No trailing whitespace in source. Markdown is excluded on purpose: two
+  // trailing spaces are a hard line break there, so stripping them changes
+  // rendering.
+  whitespace(fail, note) {
+    const files = tracked('*.js', '*.mjs', '*.cjs', '*.ts', '*.ink', '*.json', '*.wxss', '*.wxml', '*.yml')
+      .filter((file) => !isVendored(file) && file !== 'package-lock.json');
+
+    for (const file of files) {
+      const lines = read(file).split('\n');
+      const bad = [];
+      lines.forEach((line, index) => {
+        if (/[ \t]+$/.test(line)) bad.push(index + 1);
+      });
+      if (bad.length) {
+        fail(`${file}: trailing whitespace on line${bad.length > 1 ? 's' : ''} ${bad.join(', ')}`);
+      }
+    }
+
+    note(`scanned ${files.length} source files`);
+  },
+
+  // Unit tests, wherever they are. No-op until a test/ directory exists, so
+  // this stays the single entry point rather than a second command to run.
+  tests(fail, note) {
+    const files = tracked('test/**/*.test.js', 'test/**/*.test.mjs');
+    if (!files.length) {
+      note('no test files tracked');
+      return;
+    }
+    try {
+      const out = execFileSync(process.execPath, ['--test', ...files], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      const passed = (out.match(/^# pass (\d+)$/m) || [])[1];
+      note(`ran ${files.length} test file(s), ${passed || '?'} passing`);
+    } catch (error) {
+      const out = `${error.stdout || ''}${error.stderr || ''}`;
+      const failing = out.split('\n').filter((l) => /^not ok /.test(l));
+      fail(`node --test failed:\n    ${(failing.length ? failing : out.split('\n').slice(-12)).join('\n    ')}`);
+    }
+  },
+
+  // Every sample packs with the real CLI and the artifact contains the pages
+  // its app.json declares. Slow -- it fetches aix-cli -- so the workflow gives
+  // it its own job.
+  pack(fail, note) {
+    const manifests = tracked('samples/*/app.json');
+    const outDir = mkdtempSync(join(tmpdir(), 'aiui-pack-'));
+    let packed = 0;
+
+    for (const manifest of manifests) {
+      const dir = dirname(manifest);
+      const out = join(outDir, `${dir.replace(/\//g, '-')}.aix`);
+
+      const result = runAix(['pack', `./${dir}`, '-o', out]);
+      if (result.status !== 0) {
+        fail(`${dir}: aix pack failed\n    ${(result.stderr || result.stdout).trim()}`);
+        continue;
+      }
+
+      const listed = runAix(['list', out]);
+      if (listed.status !== 0) {
+        fail(`${dir}: aix list failed\n    ${(listed.stderr || listed.stdout).trim()}`);
+        continue;
+      }
+
+      // A page can be declared and still be left out of the artifact, e.g. by
+      // an over-broad .aixignore. Packing alone would not catch that.
+      let config;
+      try {
+        config = JSON.parse(read(manifest));
+      } catch {
+        continue;
+      }
+      const missing = (config.pages || []).filter(
+        (page) => !listed.stdout.includes(`${page}.ink`) && !listed.stdout.includes(`${page}.js`),
+      );
+      if (missing.length) {
+        fail(`${dir}: packed artifact is missing ${missing.join(', ')}`);
+        continue;
+      }
+      packed += 1;
+    }
+
+    note(`packed and inspected ${packed} of ${manifests.length} samples`);
+  },
+
   // Relative markdown links and images point at something that exists.
   // Extensionless links are site routes, so the doc extensions are tried too.
   links(fail, note) {
@@ -314,6 +408,13 @@ const checks = {
         if (!candidates(target).some((c) => existsSync(resolve(REPO_ROOT, base, c)))) {
           fail(`${file}: "${raw}" matches no file`);
         }
+      }
+
+      // A link into a review branch 404s the moment that branch is deleted.
+      for (const match of read(file).matchAll(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:tree|blob)\/([\w./-]+?)\//g)) {
+        const ref = match[1];
+        if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
+        fail(`${file}: links into branch "${ref}", which will not outlive the review`);
       }
     }
 

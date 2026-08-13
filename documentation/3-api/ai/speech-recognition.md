@@ -17,6 +17,7 @@
 
 ```javascript
 const recognition = new SpeechRecognition();
+recognition.lang = 'pt-BR';
 ```
 
 ## 基本用法
@@ -58,6 +59,7 @@ recognition.start();
 - 开始识别前，先确保当前界面处于可交互状态。
 - 把“正在聆听”“识别中”“识别完成”“识别失败”这些状态明确展示给用户。
 - 不要在同一个实例上并发启动多轮识别请求。
+- 如果智能体必须听某种语言，请把 `recognition.lang` 设为 BCP 47 标签，例如 `pt-BR`。
 
 ## 继续阅读
 

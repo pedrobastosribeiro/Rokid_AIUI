@@ -149,6 +149,10 @@
               {
                 "id": "llm",
                 "label": "Large Language Model"
+              },
+              {
+                "id": "locale",
+                "label": "Glasses language (pt-BR)"
               }
             ]
           },

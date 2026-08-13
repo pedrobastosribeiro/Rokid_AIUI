@@ -9,4 +9,4 @@ Click the sub-sections in the left-side menu to view details:
 - **Modularization**: Organize and manage code modules.
 - **Canvas**: Use Canvas for 2D drawing.
 - **Device**: Connect BLE peripherals and read the accelerometer, gyroscope, and orientation sensor.
-- **AI Capabilities**: Speech recognition, speech synthesis, and large language model invocation.
+- **AI Capabilities**: Speech recognition, speech synthesis, large language model invocation, and glasses language (pt-BR).

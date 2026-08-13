@@ -17,6 +17,7 @@ Speech recognition is based on `SpeechRecognition`:
 
 ```javascript
 const recognition = new SpeechRecognition();
+recognition.lang = 'pt-BR';
 ```
 
 ## Basic Usage
@@ -58,6 +59,7 @@ recognition.start();
 - Before starting recognition, make sure the current screen is ready for interaction.
 - Clearly present states such as "listening", "recognizing", "recognition complete", and "recognition failed" to users.
 - Do not start multiple recognition sessions concurrently on the same instance.
+- Set `recognition.lang` to a BCP 47 tag such as `pt-BR` when the agent must listen in a specific language.
 
 ## Read Next
 

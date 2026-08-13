@@ -34,12 +34,12 @@ function copyDir(src, dest) {
       copyDir(srcPath, destPath);
     } else {
       let content = fs.readFileSync(srcPath, 'utf-8');
-      
+
       // Replace placeholders
       if (content.includes('{{PROJECT_NAME}}')) {
         content = content.replace(/\{\{PROJECT_NAME\}\}/g, path.basename(targetPath));
       }
-      
+
       fs.writeFileSync(destPath, content, 'utf-8');
     }
   }

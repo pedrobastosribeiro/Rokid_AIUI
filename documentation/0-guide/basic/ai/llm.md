@@ -124,4 +124,5 @@ const result = await session.prompt('帮我查询一下杭州今天天气');
 
 - **[语音识别](/AIUI/guide/basic-ai-asr)**：查看如何把用户语音输入转为文本交给模型。
 - **[语音播报](/AIUI/guide/basic-ai-tts)**：查看如何把模型回复播报给用户。
+- **[眼镜语言（pt-BR）](/AIUI/guide/basic-ai-locale)**：查看如何把 ASR、提示词和 TTS 保持在 `pt-BR` 等语言。
 - **[大语言模型 (API 参考)](/AIUI/api/ai-language-model)**：查看完整 API 参考文档。

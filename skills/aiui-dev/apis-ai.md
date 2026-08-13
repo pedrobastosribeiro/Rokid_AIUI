@@ -276,12 +276,13 @@ while (true) {
 
 ### Methods
 
-- `speechSynthesis.speak(utterance)`
+- `speechSynthesis.speak(utterance, mode?)`
 
 ### Behavior notes
 
-- `speak(utterance)` forwards the utterance state to the native runtime through IPC.
+- `speak(utterance, mode?)` forwards the utterance state to the native runtime through IPC.
 - `speechSynthesis` currently supports dispatching speech synthesis requests through `speak()` only.
+- `mode` accepts `'enqueue'` or `'immediate'`; omitted mode defaults to `'enqueue'`.
 - `cancel()`, `pause()`, `resume()`, `getVoices()`, and utterance lifecycle events are not exposed.
 
 ## `SpeechSynthesisUtterance`
@@ -339,6 +340,7 @@ while (true) {
 
 - Default values are `lang = ''`, `continuous = false`, `interimResults = false`, and `maxAlternatives = 1`.
 - If `lang` is left empty, the host speech capability chooses the default language for the current runtime.
+- `lang` accepts BCP 47 tags such as `zh-CN`, `en-US`, and `pt-BR`.
 - `start()` forwards a new recognition session request to the host speech capability.
 - `stop()` asks the host to stop listening and finalize the active session if possible.
 - `abort()` stops the active session immediately without expecting a normal final result.

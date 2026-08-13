@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "Óculos Rokid",
+    "viewport": {
+      "width": "device-width"
+    }
+  }
+}
