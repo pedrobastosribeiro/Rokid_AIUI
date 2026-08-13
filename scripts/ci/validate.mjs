@@ -400,7 +400,8 @@ const checks = {
 
     for (const file of files) {
       const base = dirname(file);
-      for (const match of read(file).matchAll(LINK)) {
+      const text = read(file);
+      for (const match of text.matchAll(LINK)) {
         const raw = match[1] !== undefined ? match[1] : match[2];
         if (!raw) continue;
         // Skip external URLs, anchors, and site-absolute routes -- the last
@@ -422,20 +423,27 @@ const checks = {
       }
 
       // A link into a review branch 404s the moment that branch is deleted.
-      for (const match of read(file).matchAll(
+      for (const match of text.matchAll(
         /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
       )) {
         const [, owner, repo, rawTarget] = match;
-        // Everything after the ref that belongs to the prose rather than the
-        // link has to come off first. Without the query and fragment,
-        // `/tree/main?tab=readme` reads as the ref "main?tab=readme"; without
-        // the trailing punctuation, a bare URL ending a sentence reads as
-        // "main." Both match neither the default branch nor a tag, so a
-        // correct link fails the check.
-        const target = rawTarget
-          .split(/[?#]/)[0]
-          .replace(/[.,;:!\]]+$/, '')
-          .replace(/\/+$/, '');
+        // Trailing characters may belong to the prose or to the ref, and which
+        // one depends on how the URL was written. A `)` or `>` right after the
+        // match means the link was delimited, so its boundary is already known
+        // and every remaining character is part of the target.
+        const after = text[match.index + match[0].length];
+        const delimited = after === ')' || after === '>';
+
+        let target = rawTarget.split(/[?#]/)[0];
+        // git check-ref-format: a ref can contain neither `:` nor a trailing
+        // `.`, so those are prose wherever they appear.
+        target = target.replace(/[.:]+$/, '');
+        // `,` `;` `!` `]` are all legal in a ref name, so they can only be
+        // stripped where the URL ran to whitespace and they are ambiguous.
+        if (!delimited) {
+          target = target.replace(/[,;!\]]+$/, '');
+        }
+        target = target.replace(/\/+$/, '');
         if (!target) continue;
 
         if (
