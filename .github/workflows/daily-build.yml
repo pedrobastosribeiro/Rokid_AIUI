@@ -6,7 +6,14 @@ on:
     - cron: '0 0 * * *'
 
 jobs:
+  # The nightly publish is unattended, so it gates on the same checks a PR
+  # gets -- including the one that scaffolds a project from the packed
+  # artifact. Without this the publish would race them and ship regardless.
+  checks:
+    uses: ./.github/workflows/pr-checks.yml
+
   publish:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

@@ -12,8 +12,11 @@ import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = resolve(dirname(new URL(import.meta.url).pathname), '../..');
+// fileURLToPath, not `.pathname`: the latter keeps percent-encoding, so a
+// checkout under a path with a space resolves to a directory that is not there.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 function tracked(...patterns) {
   const out = execSync(`git ls-files -z -- ${patterns.map((p) => `'${p}'`).join(' ')}`, {
@@ -76,8 +79,9 @@ function syntaxError(source, ext) {
 // ---------------------------------------------------------------------------
 
 const checks = {
-  // Every tracked JSON file parses. Catches the hand-edited app.json /
-  // index.json / toc.json that the framework loads at runtime.
+  // Every tracked JSON file parses, plus the JSON embedded in `.ink` files.
+  // Catches the hand-edited app.json / index.json / toc.json that the
+  // framework loads at runtime.
   json(fail, note) {
     const files = tracked('*.json').filter((f) => f !== 'package-lock.json');
     for (const file of files) {
@@ -87,7 +91,31 @@ const checks = {
         fail(`${file}: ${error.message}`);
       }
     }
-    note(`parsed ${files.length} json files`);
+
+    // An `.ink` page carries its page config in a `<script def>` block. That
+    // JSON never reaches a .json file, so nothing above would look at it, yet
+    // it holds runtime config such as usingComponents.
+    const inkFiles = tracked('*.ink');
+    let defBlocks = 0;
+    for (const file of inkFiles) {
+      const text = read(file);
+      const open = text.match(/<script\b[^>]*\bdef\b[^>]*>/);
+      if (!open) continue; // A def block is optional.
+      const body = text.slice(open.index + open[0].length);
+      const end = body.indexOf('</script>');
+      if (end === -1) {
+        fail(`${file}: <script def> is never closed`);
+        continue;
+      }
+      defBlocks += 1;
+      try {
+        JSON.parse(body.slice(0, end));
+      } catch (error) {
+        fail(`${file}: <script def> block: ${error.message}`);
+      }
+    }
+
+    note(`parsed ${files.length} json files and ${defBlocks} <script def> blocks`);
   },
 
   // Script sources parse. This is a syntax check only -- it does not resolve
@@ -137,12 +165,26 @@ const checks = {
     }
   },
 
-  // Every page and component an app.json declares resolves to a real file.
-  // Bad paths here fail at runtime on the device, not at pack time.
+  // Every page and component an app.json declares resolves to a *complete*
+  // file set. Bad paths here fail at runtime on the device, not at pack time.
+  //
+  // A route is satisfied two ways (documentation/0-guide/structure.en-US.md):
+  // one `.ink` single-file component, or the multi-file form, where the logic
+  // file alone renders nothing without its `.wxml` structure.
   samples(fail, note) {
-    const PAGE_EXT = ['.ink', '.js', '.ts'];
+    const LOGIC_EXT = ['.js', '.ts'];
     const manifests = tracked('samples/*/app.json', 'packages/*/template/app.json');
     let entries = 0;
+
+    const unresolved = (root, route) => {
+      if (exists(`${root}/${route}.ink`)) return null;
+      const logic = LOGIC_EXT.find((ext) => exists(`${root}/${route}${ext}`));
+      if (!logic) return `resolves to no .ink${LOGIC_EXT.map((e) => ` / ${e}`).join('')} file`;
+      if (!exists(`${root}/${route}.wxml`)) {
+        return `has ${route}${logic} but no ${route}.wxml to render`;
+      }
+      return null;
+    };
 
     for (const manifest of manifests) {
       const root = dirname(manifest);
@@ -155,16 +197,14 @@ const checks = {
 
       for (const page of config.pages || []) {
         entries += 1;
-        if (!PAGE_EXT.some((ext) => exists(`${root}/${page}${ext}`))) {
-          fail(`${manifest}: page "${page}" resolves to no ${PAGE_EXT.join(' / ')} file`);
-        }
+        const problem = unresolved(root, page);
+        if (problem) fail(`${manifest}: page "${page}" ${problem}`);
       }
 
       for (const [name, path] of Object.entries(config.usingComponents || {})) {
         entries += 1;
-        if (!PAGE_EXT.some((ext) => exists(`${root}/${path}${ext}`))) {
-          fail(`${manifest}: component "${name}" -> "${path}" resolves to no file`);
-        }
+        const problem = unresolved(root, path);
+        if (problem) fail(`${manifest}: component "${name}" -> "${path}" ${problem}`);
       }
     }
 
@@ -174,7 +214,10 @@ const checks = {
   // Relative markdown links and images point at something that exists.
   // Extensionless links are site routes, so the doc extensions are tried too.
   links(fail, note) {
-    const LINK = /!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+    // Two destination forms: bare, and angle-bracketed -- the latter is the
+    // only way to write a destination containing spaces, so it cannot be
+    // skipped as if it were markup.
+    const LINK = /!?\[[^\]]*\]\(\s*(?:<([^>]*)>|([^)\s]+))(?:\s+"[^"]*")?\s*\)/g;
     const candidates = (target) => [
       target,
       `${target}.md`,
@@ -188,10 +231,11 @@ const checks = {
     for (const file of files) {
       const base = dirname(file);
       for (const match of read(file).matchAll(LINK)) {
-        const raw = match[1];
+        const raw = match[1] !== undefined ? match[1] : match[2];
+        if (!raw) continue;
         // Skip external URLs, anchors, and site-absolute routes -- the last
         // are resolved by the docs site, not by the filesystem.
-        if (/^(https?:|mailto:|tel:|data:|#|<)/.test(raw) || raw.startsWith('/')) continue;
+        if (/^(https?:|mailto:|tel:|data:|#)/.test(raw) || raw.startsWith('/')) continue;
 
         let target;
         try {
