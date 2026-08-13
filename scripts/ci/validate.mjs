@@ -8,7 +8,7 @@
 //   node scripts/ci/validate.mjs            # every check
 //   node scripts/ci/validate.mjs json links # only the named checks
 
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve, sep } from 'node:path';
@@ -18,8 +18,11 @@ import { fileURLToPath } from 'node:url';
 // checkout under a path with a space resolves to a directory that is not there.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
+// execFileSync, not a shell string: pathspecs like *.json would need quoting to
+// survive a POSIX shell, and those quotes are literal characters to cmd.exe, so
+// on Windows git would match nothing and every check would pass over zero files.
 function tracked(...patterns) {
-  const out = execSync(`git ls-files -z -- ${patterns.map((p) => `'${p}'`).join(' ')}`, {
+  const out = execFileSync('git', ['ls-files', '-z', '--', ...patterns], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
@@ -32,6 +35,42 @@ const exists = (file) => existsSync(join(REPO_ROOT, file));
 
 // Third-party code is shipped as-is and is not ours to lint.
 const isVendored = (file) => file.split(sep).includes('vendor');
+
+// An `.ink` page or component keeps its config in a `<script def>` block, so
+// that JSON never reaches a .json file. Returns null when there is no block;
+// otherwise `config` is null if it is malformed and `error` says why.
+function readInkDef(file) {
+  const text = read(file);
+  const open = text.match(/<script\b[^>]*\bdef\b[^>]*>/);
+  if (!open) {
+    return null;
+  }
+  const body = text.slice(open.index + open[0].length);
+  const end = body.indexOf('</script>');
+  if (end === -1) {
+    return { config: null, error: new Error('<script def> is never closed') };
+  }
+  try {
+    return { config: JSON.parse(body.slice(0, end)), error: null };
+  } catch (error) {
+    return { config: null, error };
+  }
+}
+
+// The app root is the nearest ancestor holding an app.json. Component paths in
+// a page config resolve from there, not from the page's own directory.
+function appRootFor(file) {
+  let dir = dirname(file);
+  for (;;) {
+    if (exists(`${dir}/app.json`)) {
+      return dir;
+    }
+    if (dir === '.' || dir === sep || dir === '') {
+      return null;
+    }
+    dir = dirname(dir);
+  }
+}
 
 // ---------------------------------------------------------------------------
 
@@ -83,7 +122,9 @@ const checks = {
   // Catches the hand-edited app.json / index.json / toc.json that the
   // framework loads at runtime.
   json(fail, note) {
-    const files = tracked('*.json').filter((f) => f !== 'package-lock.json');
+    // package-lock.json is included: a conflicted merge can leave it malformed,
+    // and every `npm ci` downstream fails before anything else gets a chance.
+    const files = tracked('*.json');
     for (const file of files) {
       try {
         JSON.parse(read(file));
@@ -92,26 +133,13 @@ const checks = {
       }
     }
 
-    // An `.ink` page carries its page config in a `<script def>` block. That
-    // JSON never reaches a .json file, so nothing above would look at it, yet
-    // it holds runtime config such as usingComponents.
-    const inkFiles = tracked('*.ink');
     let defBlocks = 0;
-    for (const file of inkFiles) {
-      const text = read(file);
-      const open = text.match(/<script\b[^>]*\bdef\b[^>]*>/);
-      if (!open) continue; // A def block is optional.
-      const body = text.slice(open.index + open[0].length);
-      const end = body.indexOf('</script>');
-      if (end === -1) {
-        fail(`${file}: <script def> is never closed`);
-        continue;
-      }
+    for (const file of tracked('*.ink')) {
+      const def = readInkDef(file);
+      if (!def) continue; // A def block is optional.
       defBlocks += 1;
-      try {
-        JSON.parse(body.slice(0, end));
-      } catch (error) {
-        fail(`${file}: <script def> block: ${error.message}`);
+      if (def.error) {
+        fail(`${file}: <script def> block: ${def.error.message}`);
       }
     }
 
@@ -186,6 +214,18 @@ const checks = {
       return null;
     };
 
+    // A host package, not a path in this repo.
+    const isPackageSpecifier = (path) => path.startsWith('@');
+
+    const checkComponents = (source, root, usingComponents) => {
+      for (const [name, path] of Object.entries(usingComponents || {})) {
+        if (isPackageSpecifier(path)) continue;
+        entries += 1;
+        const problem = unresolved(root, path);
+        if (problem) fail(`${source}: component "${name}" -> "${path}" ${problem}`);
+      }
+    };
+
     for (const manifest of manifests) {
       const root = dirname(manifest);
       let config;
@@ -201,14 +241,39 @@ const checks = {
         if (problem) fail(`${manifest}: page "${page}" ${problem}`);
       }
 
-      for (const [name, path] of Object.entries(config.usingComponents || {})) {
-        entries += 1;
-        const problem = unresolved(root, path);
-        if (problem) fail(`${manifest}: component "${name}" -> "${path}" ${problem}`);
-      }
+      checkComponents(manifest, root, config.usingComponents);
     }
 
-    note(`resolved ${entries} page and component paths across ${manifests.length} apps`);
+    // usingComponents is not only an app-level key: a page or a component can
+    // declare its own, in an `.ink` def block or a sibling index.json. Those
+    // paths resolve from the app root too, and nothing above would see them.
+    let pageConfigs = 0;
+    for (const file of tracked('samples/**/*.ink', 'packages/*/template/**/*.ink')) {
+      const def = readInkDef(file);
+      if (!def || !def.config) continue; // Missing or malformed: the json check has it.
+      const root = appRootFor(file);
+      if (!root) continue;
+      pageConfigs += 1;
+      checkComponents(file, root, def.config.usingComponents);
+    }
+
+    for (const file of tracked('samples/**/index.json', 'packages/*/template/**/index.json')) {
+      let config;
+      try {
+        config = JSON.parse(read(file));
+      } catch {
+        continue; // Reported by the json check.
+      }
+      const root = appRootFor(file);
+      if (!root) continue;
+      pageConfigs += 1;
+      checkComponents(file, root, config.usingComponents);
+    }
+
+    note(
+      `resolved ${entries} page and component paths across ` +
+        `${manifests.length} apps and ${pageConfigs} page configs`,
+    );
   },
 
   // Relative markdown links and images point at something that exists.
