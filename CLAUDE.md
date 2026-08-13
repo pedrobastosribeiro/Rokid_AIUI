@@ -6,24 +6,29 @@ Everything below is repository-specific and cost someone time to discover. Gener
 
 ## Checks
 
-`npm test` is the single entry point, and CI runs the same command:
+`npm test` runs `node scripts/ci/validate.mjs` — seven checks: `json`, `syntax`, `samples`, `whitespace`, `tests`, `pack`, `links`. Pass names for a subset:
 
 ```bash
-npm test                              # every check
+npm test                              # every validate.mjs check
 node scripts/ci/validate.mjs links    # one check
 ```
 
-Checks are `json`, `syntax`, `samples`, `whitespace`, `tests`, `pack`, `links`. `pack` fetches `aix-cli` and packs all samples, so it is the slow one.
+`pack` fetches `aix-cli` and packs all samples, so it is the slow one.
+
+That is not the whole CI gate. `.github/workflows/pr-checks.yml` has three jobs: `validate` (the static checks), `pack` (the pack check), and `scaffold`, which `npm pack`s `packages/create-aiui-agent`, installs the tarball, drives the installed binary, and asserts the generated files. `validate.mjs` does none of that, so a regression in `files`, `.npmignore`, or bin packaging passes `npm test` and still fails CI and the publish workflow.
 
 The validator is deliberately dependency-free — the repo ships no tooling lockfile. Keep it that way; a new check should use Node built-ins and `git ls-files`.
 
-Publishing `create-aiui-agent` to npm gates on these checks, so a red run blocks the release. The publish is triggered by bumping `version` in `packages/create-aiui-agent/package.json` on `main`; it skips itself when that version is already on the registry.
+Publishing `create-aiui-agent` to npm gates on the full `pr-checks` workflow (validate + pack + scaffold), so a red run blocks the release. The publish is triggered by bumping `version` in `packages/create-aiui-agent/package.json` on `main`; it skips itself when that version is already on the registry.
 
-## `AGENTS.md` is a format, not a readme
+## `AGENTS.md` is a format, not a readme — except at the repo root
 
-In this repo `AGENTS.md` is a specification — an agent manifest with a required shape (`# Agent: <name>`, `## System Prompts`, `## Capabilities`), defined in [the Open Agent Format docs](documentation/1-framework/open-agent-format/agents.md). Every sample has one, and `create-aiui-agent` scaffolds one into each new project.
+Two different jobs share the same filename. Do not collapse them.
 
-Do not put repository prose in a file named `AGENTS.md`. Repository guidance goes here.
+- **`samples/*/AGENTS.md` and `packages/create-aiui-agent/template/AGENTS.md`** are agent manifests for samples and the scaffold, not repository guidance. [The Open Agent Format spec](documentation/1-framework/open-agent-format/agents.md) defines `# Agent: <name>` / `## System Prompts` / `## Capabilities` / `## Configuration` / `## Dependencies` — that is the target, not a description of what is checked in. Only `samples/pt-br` currently follows it; the rest predate the spec (`# Agent Manifest` + Identity, a title plus Getting Started, or a title with no sections). Do not mass-rewrite them to the spec as a side effect of an unrelated change, and do not put repository prose in those files.
+- **The root `AGENTS.md`** is Cursor Cloud / cross-tool **agent operating guidance**: what a Cloud VM can and cannot run (the scaffolding CLI, `npm test` vs `pack`'s network need, `npm ci` vs the `npm install` lockfile trap). Cursor Cloud and other agents load that filename automatically; the filename *is* the mechanism. Do not rename it to `DEVELOPMENT.md`, do not treat it as a misplaced manifest, and do not fold its content into this file.
+
+Repository authoring conventions (this document) go here. Cloud VM operating guidance goes in the root `AGENTS.md`.
 
 ## Writing `.ink` samples
 
