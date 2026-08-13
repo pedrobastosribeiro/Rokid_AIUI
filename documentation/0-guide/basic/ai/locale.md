@@ -2,7 +2,7 @@
 
 AIUI 不会安装系统语言包。要让眼镜用某种语言（例如巴西葡萄牙语）对话，需要分别配置 **三层**：宿主应用语言、语音输入/输出，以及模型提示词。
 
-本文以 **`pt-BR`** 作为第一个可落地的本地化示例。可运行实现见 [`samples/pt-br`](https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-locale-sample-e686/samples/pt-br)。
+本文以 **`pt-BR`** 作为第一个可落地的本地化示例。可运行实现见 [`samples/pt-br`](https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/main/samples/pt-br)。
 
 ## 1. 宿主语言
 
