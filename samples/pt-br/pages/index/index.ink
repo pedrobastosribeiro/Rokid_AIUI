@@ -21,6 +21,7 @@ import {
   COPY,
   TARGET_LOCALE,
   applyPortugueseSpeech,
+  ensureVoicesReady,
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
@@ -187,7 +188,11 @@ export default {
     });
 
     const initialPrompt = normalizeText(query && query.prompt);
-    await this.refreshAvailability();
+    // Warm the host voice list here rather than at the first speak(): browsers
+    // populate it asynchronously, so reading it later would speak the opening
+    // reply in the default voice. Running it alongside the availability round
+    // trip means it costs no extra wall clock in the normal case.
+    await Promise.all([this.refreshAvailability(), ensureVoicesReady()]);
     if (!this.pageActive) {
       return;
     }

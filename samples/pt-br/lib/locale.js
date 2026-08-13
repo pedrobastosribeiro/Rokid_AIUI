@@ -19,7 +19,7 @@ export const COPY = {
   asrLanguage: 'Este runtime não reconhece pt-BR. Tente de novo.',
   ttsUnavailable: 'Síntese de voz indisponível. A resposta fica só em texto.',
   ttsLangHint:
-    'A leitura é em pt-BR. No Craft, a voz é a do celular — use Siri em português.',
+    'Pedimos pt-BR; o host pode ignorar. No Craft, use Siri em português.',
   speakButton: 'Falar',
   stopButton: 'Parar',
   replayButton: 'Ouvir',
@@ -98,19 +98,95 @@ export function pickPortugueseVoice(voices) {
   return list.find((voice) => isPortugueseVoice(voice)) || null;
 }
 
-function listHostVoices() {
+// Browser hosts populate the voice registry asynchronously: the first
+// getVoices() call returns an empty list and a `voiceschanged` event follows.
+// Reading it once would therefore speak the first reply -- typically the
+// query.prompt one dispatched during startup -- in the default voice, which is
+// the exact outcome selecting a Portuguese voice exists to avoid.
+const VOICES_READY_TIMEOUT_MS = 1000;
+
+function speechSynthesisApi() {
   try {
     if (
       typeof speechSynthesis !== 'undefined' &&
       typeof speechSynthesis.getVoices === 'function'
     ) {
-      const voices = speechSynthesis.getVoices();
-      return Array.isArray(voices) ? voices : [];
+      return speechSynthesis;
     }
   } catch (_) {
     // Glasses runtime does not expose getVoices().
   }
-  return [];
+  return null;
+}
+
+function listHostVoices() {
+  const api = speechSynthesisApi();
+  if (!api) {
+    return [];
+  }
+  try {
+    const voices = api.getVoices();
+    return Array.isArray(voices) ? voices : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+let pendingVoices = null;
+
+// Resolves with the host voices once they exist, or once the timeout expires.
+// Call it during startup so the wait overlaps work that is already happening
+// and no utterance is ever delayed by it. Cheap to call repeatedly: it returns
+// immediately once voices are present, and a host with no voice list at all
+// (the glasses runtime) resolves on the spot with an empty list.
+export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
+  const present = listHostVoices();
+  if (present.length || !speechSynthesisApi()) {
+    return Promise.resolve(present);
+  }
+  if (pendingVoices) {
+    return pendingVoices;
+  }
+
+  const api = speechSynthesisApi();
+  pendingVoices = new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      // Drop the timer when the event wins, so it does not sit pending.
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      try {
+        if (typeof api.removeEventListener === 'function') {
+          api.removeEventListener('voiceschanged', finish);
+        }
+      } catch (_) {
+        // Nothing to detach.
+      }
+      // Only ever a handle on a wait in flight, so that concurrent callers
+      // share one. Clearing it here means a populated registry is answered by
+      // the fast path above, and timing out empty is not cached as a permanent
+      // "this host has no voices".
+      pendingVoices = null;
+      resolve(listHostVoices());
+    };
+
+    try {
+      if (typeof api.addEventListener === 'function') {
+        api.addEventListener('voiceschanged', finish);
+      }
+    } catch (_) {
+      // No event support; the timeout is the only path out.
+    }
+    timer = setTimeout(finish, timeoutMs);
+  });
+
+  return pendingVoices;
 }
 
 export function applyPortugueseSpeech(utterance) {

@@ -6,6 +6,7 @@ import {
   COPY,
   TARGET_LOCALE,
   applyPortugueseSpeech,
+  ensureVoicesReady,
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
@@ -118,4 +119,68 @@ test('the voice loop pins ASR and spoken TTS to Portuguese', () => {
   assert.match(inkSource, /recognition\.lang = TARGET_LOCALE/);
   assert.match(inkSource, /applyPortugueseSpeech\(utterance\)/);
   assert.match(inkSource, /speechSynthesis\.speak\(utterance, 'immediate'\)/);
+});
+
+// --- host voice registry timing -------------------------------------------
+// Browsers populate voices asynchronously; the glasses runtime has no registry
+// at all. Both have to work, and neither may hang startup.
+
+function withSpeechSynthesis(stub, run) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'speechSynthesis');
+  const previous = globalThis.speechSynthesis;
+  globalThis.speechSynthesis = stub;
+  return Promise.resolve()
+    .then(run)
+    .finally(() => {
+      if (had) {
+        globalThis.speechSynthesis = previous;
+      } else {
+        delete globalThis.speechSynthesis;
+      }
+    });
+}
+
+test('resolves at once when the host exposes no voice registry', async () => {
+  // The glasses runtime: speechSynthesis exists but getVoices() does not.
+  await withSpeechSynthesis({ speak() {} }, async () => {
+    assert.deepEqual(await ensureVoicesReady(50), []);
+  });
+});
+
+test('resolves at once when voices are already populated', async () => {
+  const voices = [{ lang: 'pt-BR', name: 'Luciana' }];
+  await withSpeechSynthesis({ getVoices: () => voices }, async () => {
+    assert.deepEqual(await ensureVoicesReady(50), voices);
+  });
+});
+
+test('waits for voiceschanged when the registry starts empty', async () => {
+  let voices = [];
+  let fire = null;
+  const stub = {
+    getVoices: () => voices,
+    addEventListener(name, handler) {
+      if (name === 'voiceschanged') fire = handler;
+    },
+    removeEventListener() {},
+  };
+
+  await withSpeechSynthesis(stub, async () => {
+    const ready = ensureVoicesReady(5000);
+    voices = [{ lang: 'pt-BR', name: 'Luciana' }];
+    fire();
+    const resolved = await ready;
+    assert.equal(resolved.length, 1);
+    assert.equal(pickPortugueseVoice(resolved).name, 'Luciana');
+  });
+});
+
+test('gives up after the timeout when no voices ever arrive', async () => {
+  const stub = { getVoices: () => [], addEventListener() {}, removeEventListener() {} };
+  await withSpeechSynthesis(stub, async () => {
+    const started = process.hrtime.bigint();
+    assert.deepEqual(await ensureVoicesReady(20), []);
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    assert.ok(elapsedMs < 1000, `waited ${elapsedMs}ms, should honour the 20ms timeout`);
+  });
 });
