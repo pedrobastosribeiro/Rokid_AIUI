@@ -6,8 +6,8 @@ on:
     branches:
       - main
   workflow_dispatch:
-  # Callable so the nightly publish can gate on these same checks instead of
-  # running in parallel with them. See daily-build.yml.
+  # Callable so the publish workflow gates on these same checks instead of
+  # running in parallel with them. See publish-create-aiui-agent.yml.
   workflow_call:
 
 # A new push to a PR makes the in-flight run obsolete.
