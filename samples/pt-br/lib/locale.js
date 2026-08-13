@@ -134,6 +134,27 @@ function listHostVoices() {
 }
 
 let pendingVoices = null;
+// A full discovery window that found nothing is worth remembering: without it,
+// an English-only host re-runs the whole wait before every single reply. Held
+// against the registry it was learned from, not globally -- a different
+// speechSynthesis object has not been examined yet -- and any `voiceschanged`
+// reopens it, so a voice that arrives late is still picked up.
+let exhaustedFor = null;
+let watchedApi = null;
+
+function watchVoiceChanges(api) {
+  if (watchedApi === api || typeof api.addEventListener !== 'function') {
+    return;
+  }
+  watchedApi = api;
+  try {
+    api.addEventListener('voiceschanged', () => {
+      exhaustedFor = null;
+    });
+  } catch (_) {
+    // No event support: the window's outcome stands until the page reloads.
+  }
+}
 
 // Resolves once a Portuguese voice is available, or once the timeout expires.
 // Start it at load without awaiting, then await it immediately before speaking:
@@ -151,8 +172,14 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
   if (pendingVoices) {
     return pendingVoices;
   }
+  // Already waited a full window on this registry and found nothing. Waiting
+  // again would delay every reply rather than only the first.
+  if (exhaustedFor === speechSynthesisApi()) {
+    return Promise.resolve(listHostVoices());
+  }
 
   const api = speechSynthesisApi();
+  watchVoiceChanges(api);
   let settled = false;
   const waiting = new Promise((resolve) => {
     let timer = null;
@@ -176,7 +203,9 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
       } catch (_) {
         // Nothing to detach.
       }
-      resolve(listHostVoices());
+      const voices = listHostVoices();
+      exhaustedFor = pickPortugueseVoice(voices) ? null : api;
+      resolve(voices);
     };
 
     // Settle only once Portuguese is actually there. `voiceschanged` can fire

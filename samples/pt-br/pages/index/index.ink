@@ -524,8 +524,16 @@ export default {
     return true;
   },
 
-  replayReply() {
+  async replayReply() {
     if (this.data.isBusy || this.promptInFlight) {
+      return;
+    }
+    // The same readiness gate answerPrompt() uses. Without it, replaying the
+    // greeting while the registry is still filling -- reachable when the page
+    // opens with no query and ASR is unavailable -- speaks in the default
+    // voice, which is the one path that still bypassed the warmup.
+    await ensureVoicesReady();
+    if (!this.pageActive) {
       return;
     }
     // Replays the unclamped reply, not the HUD copy.

@@ -266,3 +266,45 @@ test('does not cache a settled result across a registry reset', async () => {
     assert.deepEqual(await ensureVoicesReady(20), []);
   });
 });
+
+test('does not re-run a full discovery window for every reply', async () => {
+  // An English-only host: the first call waits out the window, later calls must
+  // answer immediately rather than delaying every reply by another timeout.
+  const stub = {
+    getVoices: () => [{ lang: 'en-US', name: 'Samantha' }],
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  await withSpeechSynthesis(stub, async () => {
+    const first = process.hrtime.bigint();
+    await ensureVoicesReady(120);
+    const firstMs = Number(process.hrtime.bigint() - first) / 1e6;
+    assert.ok(firstMs >= 100, `first call should wait the window, took ${firstMs}ms`);
+
+    const second = process.hrtime.bigint();
+    await ensureVoicesReady(120);
+    const secondMs = Number(process.hrtime.bigint() - second) / 1e6;
+    assert.ok(secondMs < 50, `second call should not wait again, took ${secondMs}ms`);
+  });
+});
+
+test('reopens discovery when the registry changes', async () => {
+  let voices = [{ lang: 'en-US', name: 'Samantha' }];
+  let fire = null;
+  const stub = {
+    getVoices: () => voices,
+    addEventListener(name, handler) {
+      if (name === 'voiceschanged') fire = handler;
+    },
+    removeEventListener() {},
+  };
+
+  await withSpeechSynthesis(stub, async () => {
+    await ensureVoicesReady(60); // exhausts discovery on this registry
+    voices = [...voices, { lang: 'pt-BR', name: 'Luciana' }];
+    if (fire) fire();
+    const voicesNow = await ensureVoicesReady(60);
+    assert.equal(pickPortugueseVoice(voicesNow).name, 'Luciana');
+  });
+});
