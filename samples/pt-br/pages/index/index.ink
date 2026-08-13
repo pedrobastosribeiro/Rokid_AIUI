@@ -20,6 +20,7 @@
 import {
   COPY,
   TARGET_LOCALE,
+  applyPortugueseSpeech,
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
@@ -493,7 +494,7 @@ export default {
 
     try {
       const utterance = new SpeechSynthesisUtterance(content);
-      utterance.lang = TARGET_LOCALE;
+      applyPortugueseSpeech(utterance);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
