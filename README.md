@@ -23,7 +23,10 @@ This will generate a ready-to-use AIUI project template including:
 
 The [`samples/`](./samples/) directory contains runnable example projects that demonstrate AIUI features and provide reference implementations for common UI patterns.
 
-At the moment, the repository includes [`samples/capabilities/`](./samples/capabilities/), a complete sample app that you can use to explore page structure, assets, helper modules, and feature demos in one place.
+At the moment, the repository includes:
+
+- [`samples/capabilities/`](./samples/capabilities/): a complete sample app for page structure, assets, helper modules, and feature demos
+- [`samples/pt-br/`](./samples/pt-br/): a Brazilian Portuguese voice agent that pins ASR, the LLM system prompt, and TTS `lang` to `pt-BR`
 
 - `pages/`: Example pages covering a range of AIUI capabilities and UI patterns.
 - `assets/`: Static resources used by the demos, such as images, SVGs, and audio files.

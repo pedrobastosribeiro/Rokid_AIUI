@@ -27,3 +27,4 @@ AIUI 内置了核心 AI 能力，让你的智能体可以听懂用户、说出�
 - **[语音识别](/AIUI/guide/basic-ai-asr)**：了解如何采集用户语音并接收识别结果。
 - **[语音播报](/AIUI/guide/basic-ai-tts)**：了解如何把文本合成为播报语音。
 - **[大语言模型](/AIUI/guide/basic-ai-llm)**：了解如何创建模型会话、请求回复和读取流式输出。
+- **[语音智能体本地化](/AIUI/guide/basic-ai-locale)**：了解如何把智能体切到巴西葡萄牙语等语言。

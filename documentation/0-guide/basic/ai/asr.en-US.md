@@ -17,6 +17,7 @@ Create a recognition instance with `SpeechRecognition`:
 
 ```javascript
 const recognition = new SpeechRecognition();
+recognition.lang = 'pt-BR'; // BCP 47 tag. Leave empty to use the host default.
 
 recognition.onresult = (event) => {
   const best = event.results[0][0];
@@ -41,9 +42,11 @@ recognition.start();
 
 - Before starting recognition, make sure the UI is in an interactive state.
 - Clearly show states such as "listening", "recognizing", and "completed" to the user.
+- Set `recognition.lang` to a BCP 47 tag such as `pt-BR` when the agent must listen in a specific language.
 
 ## Continue Reading
 
 - **[Speech Synthesis](/AIUI/guide/basic-ai-tts)**: See how to speak the result back to the user.
 - **[Large Language Model](/AIUI/guide/basic-ai-llm)**: See how to pass the recognition result to a model for processing.
+- **[Localizing Voice Agents](/AIUI/guide/basic-ai-locale)**: See how to target a language such as `pt-BR`.
 - **[Speech Recognition (API Reference)](/AIUI/api/ai-speech-recognition)**: See the complete API reference.

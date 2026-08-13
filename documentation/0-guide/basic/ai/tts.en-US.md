@@ -30,7 +30,7 @@ speechSynthesis.speak(utterance);
 | Property | Description |
 |:--|:--|
 | `text` | The text content to speak |
-| `lang` | The speech language, for example `zh-CN` or `en-US` |
+| `lang` | The speech language, for example `zh-CN`, `en-US`, or `pt-BR` |
 | `rate` | The speech rate |
 | `pitch` | The speech pitch |
 | `volume` | The speech volume, ranging from `0.0` to `1.0` |
@@ -47,4 +47,5 @@ speechSynthesis.speak(utterance);
 
 - **[Speech Recognition](/AIUI/guide/basic-ai-asr)**: See how to convert the user's voice into text.
 - **[Large Language Model](/AIUI/guide/basic-ai-llm)**: See how to generate reply content that can be spoken.
+- **[Localizing Voice Agents](/AIUI/guide/basic-ai-locale)**: See how to target a language such as `pt-BR`.
 - **[Speech Synthesis (API Reference)](/AIUI/api/ai-speech-synthesis)**: See the complete API reference.

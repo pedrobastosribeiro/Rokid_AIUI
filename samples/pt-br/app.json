@@ -1,0 +1,11 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "Assistente PT-BR",
+    "viewport": {
+      "width": "device-width"
+    }
+  }
+}
