@@ -27,7 +27,7 @@ ls #列出当前文件夹里的文件和子文件夹
 
 ![image.png](../../image/quickstart/image%203.png)
 
-2.使用本地文件夹/本地.aix文件/GitHub子目录导入AIUI。Craft 会把 `/tree/` 之后的整段当成一个 git ref，因此 `/tree/main/samples/pt-br` 会失败。pt-BR 眼镜智能体请粘贴 `https://github.com/OWNER/REPO/tree/cursor/pt-br-craft-e686`（将 `OWNER/REPO` 换成当前 GitHub 仓库）。
+2.使用本地文件夹/本地.aix文件/GitHub子目录导入AIUI。Craft 会把 `/tree/` 之后的整段当成一个 git ref，因此 `/tree/main/samples/pt-br` 会失败。pt-BR 眼镜智能体请粘贴 `https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/pt-br`。
 
 ![image.png](../../image/quickstart/image%204.png)
 

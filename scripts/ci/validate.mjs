@@ -103,11 +103,10 @@ function moduleType(file) {
 // Craft resolves everything after `/tree/` as one ref, so it cannot reach
 // `/tree/main/samples/pt-br`. Exempt from the review-branch link rule below;
 // delete both once Craft accepts a path after the ref.
-const PUBLISH_BRANCH = 'cursor/pt-br-craft-e686';
-// The sync workflow force-pushes this branch on *this* repository (`origin`),
-// so docs must use OWNER/REPO — not a hardcoded fork. The same branch name
-// under any owner is the Craft import URL for that clone.
-const HARDCODED_FORK = /github\.com\/pedrobastosribeiro\/rokid_aiui/i;
+const PUBLISH_BRANCH = 'pt-br';
+// The old Cursor-prefixed publish branch must not remain the documented
+// Craft import URL. The long-lived branch is `pt-br`.
+const CURSOR_CRAFT_BRANCH = /cursor\/pt-br-craft-e686/;
 
 // Pinned so a CLI release cannot change what CI means without a commit.
 const AIX_CLI = '@yodaos-pkg/aix-cli@0.8.2';
@@ -402,10 +401,10 @@ const checks = {
     for (const file of files) {
       const base = dirname(file);
       const text = read(file);
-      if (HARDCODED_FORK.test(text)) {
+      if (CURSOR_CRAFT_BRANCH.test(text)) {
         fail(
-          `${file}: Craft import URL is hardcoded to pedrobastosribeiro/Rokid_AIUI; ` +
-            `use https://github.com/OWNER/REPO/tree/${PUBLISH_BRANCH}`,
+          `${file}: Craft import URL still names cursor/pt-br-craft-e686; ` +
+            `use https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/${PUBLISH_BRANCH}`,
         );
       }
       for (const match of text.matchAll(LINK)) {
