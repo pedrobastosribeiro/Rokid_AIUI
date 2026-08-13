@@ -114,8 +114,8 @@ function checkPtBrInvariants() {
   const agents = read('samples/pt-br/AGENTS.md');
   const checks = [
     ['locale TARGET_LOCALE', /export const TARGET_LOCALE = 'pt-BR'/.test(locale)],
-    ['ink uses getSpeechLang for ASR', /recognition\.lang = getSpeechLang\(\)/.test(ink)],
-    ['ink uses getSpeechLang for TTS', /utterance\.lang = getSpeechLang\(\)/.test(ink)],
+    ['ink pins ASR to the target locale', /recognition\.lang = TARGET_LOCALE/.test(ink)],
+    ['ink pins TTS to the target locale', /utterance\.lang = TARGET_LOCALE/.test(ink)],
     ['ink starts listening on load', /this\.initializing = false;[\s\S]*this\.startTalk\(\);/.test(ink)],
     ['ink maps ASR failures', /getAsrFailureMessage\(/.test(ink)],
     ['ink guards unload', /this\.pageActive = false/.test(ink)],

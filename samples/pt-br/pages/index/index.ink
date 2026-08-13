@@ -19,12 +19,33 @@
 <script setup>
 import {
   COPY,
+  TARGET_LOCALE,
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
-  getSpeechLang,
   isPortuguese,
 } from '../../lib/locale.js';
+
+// Text is clamped before it reaches the view so the truncation is visible
+// ("…") rather than a mid-sentence cut, and so it holds on hosts that ignore
+// `overflow` / `max-height` — neither is on the confirmed WXSS property list,
+// where the CSS below is only the backstop.
+//
+// The budget is what the panels actually get, not what looks generous. On the
+// 480 x 352 canvas the non-shrinking chrome (header, meta, status, hint,
+// actions) plus padding and gaps costs ~193px of the 328px inner height,
+// leaving ~67px per panel; minus each panel's border, padding, and label that
+// is ~35px of body, or roughly two 19.6px lines. At ~60 characters per line,
+// 100 is the safe limit. Keep it in step with `.body { max-height }`.
+//
+// The full text still goes to the model and to TTS.
+const MAX_HUD_CHARS = 100;
+
+// `lastError` carries host ASR and model text of unknown length, and `.error`
+// is chrome that does not shrink, so an unbounded diagnostic would push the
+// action row off the canvas -- the same failure the panel clamp prevents.
+// ~120 chars is about 1.5 lines at 11px, once flattened to a single line.
+const MAX_ERROR_CHARS = 120;
 
 function normalizeText(value) {
   if (typeof value !== 'string') {
@@ -33,20 +54,45 @@ function normalizeText(value) {
   return value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function getErrorMessage(error) {
+function clampText(value, limit) {
+  const text = normalizeText(value);
+  if (text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, limit - 1).trimEnd()}…`;
+}
+
+function clampForHud(value) {
+  return clampText(value, MAX_HUD_CHARS);
+}
+
+// A host diagnostic can arrive multiline -- a short stack trace, say. The
+// character budget alone would not bound `.error`, because newlines survive
+// normalizeText() and that element neither shrinks nor caps its line count,
+// so a 120-character value could still render ten lines and push the action
+// row out. Collapse to one line first, then clamp.
+function clampErrorLine(value, limit) {
+  return clampText(normalizeText(value).replace(/\s*\n+\s*/g, ' '), limit);
+}
+
+function getErrorMessage(error, limit = MAX_ERROR_CHARS) {
   if (!error) {
     return 'Erro desconhecido';
   }
   if (typeof error === 'string') {
-    return error;
+    return clampErrorLine(error, limit);
   }
   const code = typeof error.error === 'string' ? error.error : '';
   const message = error.message || error.errMsg || '';
   if (code && message) {
-    return `${code}: ${message}`;
+    return clampErrorLine(`${code}: ${message}`, limit);
   }
-  return message || code || String(error);
+  return clampErrorLine(message || code || String(error), limit);
 }
+
+// ASR failures go through getAsrFailureMessage(), which maps each error code to
+// a fixed pt-BR sentence and so needs no clamping. getErrorMessage() below stays
+// for model and TTS errors, where the host text is arbitrary and unbounded.
 
 function extractTranscript(event) {
   const results = event && event.results ? event.results : null;
@@ -83,12 +129,23 @@ function clearRecognitionHandlers(recognition) {
   recognition.onend = null;
 }
 
+function destroySession(session) {
+  if (!session || typeof session.destroy !== 'function') {
+    return;
+  }
+  try {
+    session.destroy();
+  } catch (_) {
+    // The host may already have reclaimed the session.
+  }
+}
+
 export default {
   data: {
     title: COPY.title,
     status: COPY.idle,
     hostLanguage: '',
-    speechLang: getSpeechLang(),
+    speechLang: TARGET_LOCALE,
     hostIsPortuguese: false,
     llmAvailable: false,
     asrAvailable: false,
@@ -110,6 +167,8 @@ export default {
     this.session = null;
     this.recognition = null;
     this.finalTranscript = '';
+    this.latestTranscript = '';
+    this.lastReplyText = COPY.greeting;
     this.recognitionFailed = false;
     this.promptInFlight = false;
     this.turnId = 0;
@@ -119,7 +178,7 @@ export default {
     this.setData({
       hostLanguage: hostLanguage || '(host não informou)',
       hostIsPortuguese: isPortuguese(hostLanguage),
-      speechLang: getSpeechLang(),
+      speechLang: TARGET_LOCALE,
       asrAvailable: typeof SpeechRecognition !== 'undefined',
       ttsAvailable:
         typeof speechSynthesis !== 'undefined' &&
@@ -132,9 +191,12 @@ export default {
       return;
     }
 
+    // `initializing` gates the temple button and voice wakeup until this point,
+    // so the query prompt cannot race a turn opened during the availability
+    // round trip above and issue a second request on the same session.
     this.initializing = false;
     if (initialPrompt) {
-      this.setData({ liveTranscript: initialPrompt });
+      this.setData({ liveTranscript: clampForHud(initialPrompt) });
       await this.answerPrompt(initialPrompt);
       return;
     }
@@ -147,9 +209,9 @@ export default {
     this.activeTurnId += 1;
     this.promptInFlight = false;
     this.cancelRecognition({ discarded: true });
-    if (this.session && typeof this.session.destroy === 'function') {
-      this.session.destroy();
-    }
+    // A session still being created is disposed by ensureSession(), which sees
+    // pageActive false once its create() settles.
+    destroySession(this.session);
     this.session = null;
   },
 
@@ -162,6 +224,7 @@ export default {
     this.activeTurnId = this.turnId;
     this.recognitionFailed = false;
     this.finalTranscript = '';
+    this.latestTranscript = '';
     return this.activeTurnId;
   },
 
@@ -175,13 +238,18 @@ export default {
     if (this.initializing) {
       return;
     }
-    if (event.code === 'Enter' || event.code === 'GlobalHook') {
-      event.preventDefault();
-      if (this.data.isBusy) {
-        this.stopTalk();
-      } else {
-        this.startTalk();
-      }
+    // `Enter` is left to the host on purpose: its default behavior is to enter
+    // navigation mode or activate the focused target, which is the only way to
+    // reach the buttons below on a device with no touchscreen. The temple
+    // button (`GlobalHook`) has no host default, so it drives the voice loop.
+    if (event.code !== 'GlobalHook') {
+      return;
+    }
+    event.preventDefault();
+    if (this.data.isBusy) {
+      this.stopTalk();
+    } else {
+      this.startTalk();
     }
   },
 
@@ -207,15 +275,18 @@ export default {
     if (!this.data.llmAvailable) {
       throw new Error(COPY.llmUnavailable);
     }
+
     const session = await LanguageModel.create(getLanguageModelOptions());
     if (!this.pageActive) {
-      if (session && typeof session.destroy === 'function') {
-        session.destroy();
-      }
-      throw new Error('Page unloaded');
+      // The page unloaded while create() was pending, so onUnload saw no
+      // session to destroy. Dispose it here instead of leaking the host
+      // context, and let the caller's turn check drop the request.
+      destroySession(session);
+      throw new Error(COPY.llmUnavailable);
     }
+
     this.session = session;
-    return session;
+    return this.session;
   },
 
   cancelRecognition(options = {}) {
@@ -258,7 +329,7 @@ export default {
     });
 
     const recognition = new SpeechRecognition();
-    recognition.lang = getSpeechLang();
+    recognition.lang = TARGET_LOCALE;
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -268,7 +339,8 @@ export default {
         return;
       }
       const { transcript, hasFinal } = extractTranscript(event);
-      this.setData({ liveTranscript: transcript });
+      this.latestTranscript = transcript;
+      this.setData({ liveTranscript: clampForHud(transcript) });
       if (hasFinal && transcript) {
         this.finalTranscript = transcript;
       }
@@ -279,7 +351,14 @@ export default {
         return;
       }
       this.recognitionFailed = true;
+      // The host is not guaranteed to emit `end` after `error`, so the turn is
+      // released here instead of relying on `onend` to unstick the page.
+      if (this.recognition === recognition) {
+        this.recognition = null;
+      }
       this.setData({
+        isBusy: false,
+        status: COPY.idle,
         lastError: getAsrFailureMessage(event),
       });
     };
@@ -298,7 +377,8 @@ export default {
         });
         return;
       }
-      const transcript = this.finalTranscript || normalizeText(this.data.liveTranscript);
+      // `liveTranscript` is clamped for the HUD; use the unclamped capture.
+      const transcript = this.finalTranscript || this.latestTranscript;
       if (!transcript) {
         this.setData({
           isBusy: false,
@@ -363,7 +443,7 @@ export default {
     this.setData({
       isBusy: true,
       status: COPY.thinking,
-      liveTranscript: prompt,
+      liveTranscript: clampForHud(prompt),
       lastError: '',
     });
 
@@ -376,12 +456,13 @@ export default {
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
       }
-      this.setData({ lastReply: reply || '(sem texto)' });
-      await this.speakReply(reply);
-      if (!this.isTurnCurrent(currentTurnId)) {
-        return;
-      }
-      this.setData({ isBusy: false, status: COPY.idle });
+      this.lastReplyText = reply;
+      this.setData({ lastReply: clampForHud(reply) || '(sem texto)' });
+      const speaking = this.speakReply(reply);
+      // No utterance lifecycle event is exposed yet, so the turn is released as
+      // soon as playback is dispatched. The HUD stays on "Falando…" until the
+      // next turn replaces it rather than claiming idle over live audio.
+      this.setData({ isBusy: false, status: speaking ? COPY.speaking : COPY.idle });
     } catch (error) {
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
@@ -398,41 +479,44 @@ export default {
     }
   },
 
-  async speakReply(text, options = {}) {
+  // Returns whether playback was dispatched. Host TTS exposes no utterance
+  // lifecycle events, so this never waits for the audio to finish.
+  speakReply(text) {
     const content = normalizeText(text);
-    const restoreIdle = options.restoreIdle === true;
-    const mode = options.mode === 'immediate' ? 'immediate' : 'enqueue';
     if (!content) {
-      return;
+      return false;
     }
     if (!this.data.ttsAvailable) {
       this.setData({ lastError: COPY.ttsUnavailable });
-      return;
+      return false;
     }
 
-    this.setData({ status: COPY.speaking });
     try {
       const utterance = new SpeechSynthesisUtterance(content);
-      utterance.lang = getSpeechLang();
+      utterance.lang = TARGET_LOCALE;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      // Host TTS does not expose utterance lifecycle events, so use an explicit
-      // mode and return after dispatching the request.
-      speechSynthesis.speak(utterance, mode);
+      // `speak()` defaults to 'enqueue' and `cancel()` is not exposed yet, so
+      // without 'immediate' every reply and replay stacks behind stale audio.
+      // Both call sites want to cut over to the newest utterance, so the mode
+      // is fixed here rather than exposed as an option.
+      speechSynthesis.speak(utterance, 'immediate');
     } catch (error) {
       this.setData({ lastError: getErrorMessage(error) });
+      return false;
     }
-    if (restoreIdle) {
-      this.setData({ status: COPY.idle });
-    }
+    return true;
   },
 
   replayReply() {
     if (this.data.isBusy || this.promptInFlight) {
       return;
     }
-    this.speakReply(this.data.lastReply, { restoreIdle: true, mode: 'immediate' });
+    // Replays the unclamped reply, not the HUD copy.
+    if (this.speakReply(this.lastReplyText)) {
+      this.setData({ status: COPY.speaking });
+    }
   },
 };
 </script>
@@ -445,7 +529,7 @@ export default {
     </view>
 
     <view class="meta">
-      <text class="meta-line">Host: {{hostLanguage}}</text>
+      <text class="meta-line">Host: {{hostLanguage}} · {{hostIsPortuguese ? 'compatível com pt' : 'não é pt'}}</text>
       <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}}</text>
     </view>
 
@@ -506,12 +590,25 @@ export default {
   color: var(--ink);
 }
 
+.header,
 .meta,
 .panel,
 .status-row {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* The canvas is a fixed 480 x 352 HUD, so the chrome never shrinks; only the
+   transcript and reply panels give up space. Text itself is clamped in JS
+   because WXSS confirms neither `overflow` nor `max-height`. */
+.header,
+.meta,
+.status-row,
+.hint,
+.error,
+.actions {
+  flex-shrink: 0;
 }
 
 .meta-line,
@@ -522,6 +619,7 @@ export default {
 }
 
 .panel {
+  flex-shrink: 1;
   min-height: 0;
   padding: 8px 10px;
   border: 1px solid var(--ink-24);
@@ -541,6 +639,10 @@ export default {
 }
 
 .body {
+  /* Backstop for the JS clamp: two lines at line-height 1.4, which is what a
+     panel actually gets once the chrome is subtracted from 352px. The clamp is
+     sized to fire first so the user sees "…" instead of a hard cut. Keep in
+     step with MAX_HUD_CHARS. */
   max-height: 2.8em;
   overflow: hidden;
   font-size: 14px;
@@ -549,6 +651,9 @@ export default {
 }
 
 .error {
+  /* Backstop for the JS clamp: two lines at the 1.35 line-height below. Model
+     and TTS diagnostics are flattened and clamped in JS, so this only has to
+     catch one that wraps further than expected. */
   max-height: 2.8em;
   overflow: hidden;
 }

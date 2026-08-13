@@ -7,7 +7,6 @@ import {
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
-  getSpeechLang,
   getSystemPrompt,
   isPortuguese,
   normalizeLocale,
@@ -15,8 +14,6 @@ import {
 
 test('pins the glasses locale to pt-BR', () => {
   assert.equal(TARGET_LOCALE, 'pt-BR');
-  assert.equal(getSpeechLang(), 'pt-BR');
-  assert.equal(getSpeechLang(''), 'pt-BR');
 });
 
 test('normalizes BCP 47 tags', () => {
