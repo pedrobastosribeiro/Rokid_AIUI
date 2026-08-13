@@ -99,6 +99,12 @@ function moduleType(file) {
   }
 }
 
+// A long-lived branch whose root is the packed sample, so Craft can import it.
+// Craft resolves everything after `/tree/` as one ref, so it cannot reach
+// `/tree/main/samples/pt-br`. Exempt from the review-branch link rule below;
+// delete both once Craft accepts a path after the ref.
+const PUBLISH_BRANCH = 'cursor/pt-br-craft-e686';
+
 // Pinned so a CLI release cannot change what CI means without a commit.
 const AIX_CLI = '@yodaos-pkg/aix-cli@0.8.2';
 const runAix = (args) =>
@@ -413,21 +419,23 @@ const checks = {
       }
 
       // A link into a review branch 404s the moment that branch is deleted.
-      // cursor/pt-br-craft-e686 is a long-lived publish branch: Craft cannot
-      // import /tree/main/samples/pt-br (it looks up that whole string as a ref).
       for (const match of read(file).matchAll(
         /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
       )) {
-        const rest = match[1].replace(/\/$/, '');
-        if (
-          rest === 'cursor/pt-br-craft-e686' ||
-          rest.startsWith('cursor/pt-br-craft-e686/')
-        ) {
+        // Drop the query and fragment before reading the ref. Without this,
+        // `/tree/main?tab=readme` parses as the ref "main?tab=readme", which
+        // matches neither the default branch nor a tag, so a correct link
+        // fails the check.
+        const target = match[1].split(/[?#]/)[0].replace(/\/+$/, '');
+        if (!target) continue;
+        if (target === PUBLISH_BRANCH || target.startsWith(`${PUBLISH_BRANCH}/`)) {
           continue;
         }
-        const ref = rest.split('/')[0];
+        // Branch names can contain slashes, so this only identifies the simple
+        // cases; anything with a prefix falls through and is reported.
+        const ref = target.split('/')[0];
         if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
-        fail(`${file}: links into branch "${rest}", which will not outlive the review`);
+        fail(`${file}: "${target}" points at a branch that will not outlive the review`);
       }
     }
 
