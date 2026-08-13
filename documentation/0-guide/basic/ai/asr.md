@@ -17,6 +17,7 @@
 
 ```javascript
 const recognition = new SpeechRecognition();
+recognition.lang = 'pt-BR'; // BCP 47 语言标签。留空则使用宿主默认语言。
 
 recognition.onresult = (event) => {
   const best = event.results[0][0];
@@ -41,9 +42,11 @@ recognition.start();
 
 - 开始识别前，确保界面处于可交互状态。
 - 把"正在聆听""识别中""识别完成"等状态明确展示给用户。
+- 如果智能体必须听某种语言，请把 `recognition.lang` 设为 BCP 47 标签，例如 `pt-BR`。
 
 ## 继续阅读
 
 - **[语音播报](/AIUI/guide/basic-ai-tts)**：查看如何把结果播报给用户。
 - **[大语言模型](/AIUI/guide/basic-ai-llm)**：查看如何把识别结果交给模型处理。
+- **[眼镜语言（pt-BR）](/AIUI/guide/basic-ai-locale)**：查看如何把智能体切到 `pt-BR` 等语言。
 - **[语音识别 (API 参考)](/AIUI/api/ai-speech-recognition)**：查看完整 API 参考文档。
