@@ -276,12 +276,13 @@ while (true) {
 
 ### Methods
 
-- `speechSynthesis.speak(utterance)`
+- `speechSynthesis.speak(utterance, mode?)`
 
 ### Behavior notes
 
-- `speak(utterance)` forwards the utterance state to the native runtime through IPC.
+- `speak(utterance, mode?)` forwards the utterance state to the native runtime through IPC.
 - `speechSynthesis` currently supports dispatching speech synthesis requests through `speak()` only.
+- `mode` accepts `'enqueue'` or `'immediate'`; omitted mode defaults to `'enqueue'`.
 - `cancel()`, `pause()`, `resume()`, `getVoices()`, and utterance lifecycle events are not exposed.
 
 ## `SpeechSynthesisUtterance`

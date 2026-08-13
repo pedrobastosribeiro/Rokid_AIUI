@@ -39,7 +39,12 @@ function getErrorMessage(error) {
   if (typeof error === 'string') {
     return error;
   }
-  return error.message || error.errMsg || String(error);
+  const code = typeof error.error === 'string' ? error.error : '';
+  const message = error.message || error.errMsg || '';
+  if (code && message) {
+    return `${code}: ${message}`;
+  }
+  return message || code || String(error);
 }
 
 function extractTranscript(event) {
@@ -376,6 +381,7 @@ export default {
   async speakReply(text, options = {}) {
     const content = normalizeText(text);
     const restoreIdle = options.restoreIdle === true;
+    const mode = options.mode === 'immediate' ? 'immediate' : 'enqueue';
     if (!content) {
       return;
     }
@@ -391,8 +397,9 @@ export default {
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      // Host TTS currently dispatches speak() only; do not wait on utterance events.
-      speechSynthesis.speak(utterance);
+      // Host TTS does not expose utterance lifecycle events, so use an explicit
+      // mode and return after dispatching the request.
+      speechSynthesis.speak(utterance, mode);
     } catch (error) {
       this.setData({ lastError: getErrorMessage(error) });
     }
@@ -405,7 +412,7 @@ export default {
     if (this.data.isBusy || this.promptInFlight) {
       return;
     }
-    this.speakReply(this.data.lastReply, { restoreIdle: true });
+    this.speakReply(this.data.lastReply, { restoreIdle: true, mode: 'immediate' });
   },
 };
 </script>
