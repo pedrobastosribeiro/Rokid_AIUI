@@ -75,10 +75,10 @@ From a computer:
 aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-From [Craft Global](https://js.rokid.com/craft?region=global), do not import `/tree/main/samples/pt-br`. Craft treats that path as a git ref and returns `GitHub ref not found: main/samples/pt-br`. Paste:
+From [Craft Global](https://js.rokid.com/craft?region=global), do not import `/tree/main/samples/pt-br`. Craft treats that path as a git ref and returns `GitHub ref not found: main/samples/pt-br`. Paste this URL, replacing `OWNER/REPO` with this GitHub repository:
 
 ```text
-https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-craft-e686
+https://github.com/OWNER/REPO/tree/cursor/pt-br-craft-e686
 ```
 
 That branch has `app.json` at the repository root. Then pack in Craft, upload to an AIUI Agent named **Óculos Rokid** in [AIUI Studio Global](https://aiui-global.rokid.com/), and on the glasses run **Settings → Developer → AIUI → Update Glasses Resource Package**.

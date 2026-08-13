@@ -36,3 +36,12 @@ jobs:
           set -euo pipefail
           git subtree split --prefix=samples/pt-br -b pt-br-craft-split
           git push --force origin pt-br-craft-split:cursor/pt-br-craft-e686
+          {
+            echo "### Craft import URL"
+            echo ""
+            echo "Paste this in Craft Global (GitHub Subdirectory Import):"
+            echo ""
+            echo '```'
+            echo "https://github.com/${{ github.repository }}/tree/cursor/pt-br-craft-e686"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
