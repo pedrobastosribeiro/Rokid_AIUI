@@ -43,7 +43,7 @@ const MAX_HUD_CHARS = 100;
 // `lastError` carries host ASR and model text of unknown length, and `.error`
 // is chrome that does not shrink, so an unbounded diagnostic would push the
 // action row off the canvas -- the same failure the panel clamp prevents.
-// ~120 chars is about 1.5 lines at 11px.
+// ~120 chars is about 1.5 lines at 11px, once flattened to a single line.
 const MAX_ERROR_CHARS = 120;
 
 function normalizeText(value) {
@@ -65,19 +65,28 @@ function clampForHud(value) {
   return clampText(value, MAX_HUD_CHARS);
 }
 
+// A host diagnostic can arrive multiline -- a short stack trace, say. The
+// character budget alone would not bound `.error`, because newlines survive
+// normalizeText() and that element neither shrinks nor caps its line count,
+// so a 120-character value could still render ten lines and push the action
+// row out. Collapse to one line first, then clamp.
+function clampErrorLine(value, limit) {
+  return clampText(normalizeText(value).replace(/\s*\n+\s*/g, ' '), limit);
+}
+
 function getErrorMessage(error, limit = MAX_ERROR_CHARS) {
   if (!error) {
     return 'Erro desconhecido';
   }
   if (typeof error === 'string') {
-    return clampText(error, limit);
+    return clampErrorLine(error, limit);
   }
   const code = typeof error.error === 'string' ? error.error : '';
   const message = error.message || error.errMsg || '';
   if (code && message) {
-    return clampText(`${code}: ${message}`, limit);
+    return clampErrorLine(`${code}: ${message}`, limit);
   }
-  return clampText(message || code || String(error), limit);
+  return clampErrorLine(message || code || String(error), limit);
 }
 
 // A `SpeechRecognitionErrorEvent` carries its diagnostic in `error`, not in
@@ -649,6 +658,11 @@ export default {
 }
 
 .error {
+  /* Backstop for clampErrorLine(), mirroring `.body`: two lines at the 1.35
+     line-height above. The text is flattened and clamped in JS, so this only
+     has to catch a host diagnostic that wraps further than expected. */
+  max-height: 2.7em;
+  overflow: hidden;
   color: var(--ink);
 }
 
