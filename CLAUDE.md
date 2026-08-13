@@ -33,6 +33,11 @@ Two different jobs share the same filename. Do not collapse them.
   ## Identity
   - **Name**: Óculos Rokid
   - **Version**: 0.2.0
+
+  ## Capabilities
+  - **Permissions**:
+    - microphone
+    - network
   ```
 
   **Not the shape the spec describes.** [The Open Agent Format spec](documentation/1-framework/open-agent-format/agents.md) documents `# Agent: <name>` / `## System Prompts` / `## Capabilities` / `## Configuration` / `## Dependencies`, and AIUI Studio rejects it: it validates the packed `AGENTS.md` for the Identity form, and a `# Agent: …` title with no `Name` field is not enough — see [`samples/pt-br/CRAFT.md`](samples/pt-br/CRAFT.md). `samples/pt-br` was the last file following the spec and was moved off it in `47dea96` for exactly that reason, so today **no manifest in this repo follows the spec, and none should**. Treat the spec page as describing a format the platform does not yet accept; a manifest "corrected" toward it stops uploading.
