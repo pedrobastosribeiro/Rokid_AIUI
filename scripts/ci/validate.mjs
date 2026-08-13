@@ -104,6 +104,9 @@ function moduleType(file) {
 // `/tree/main/samples/pt-br`. Exempt from the review-branch link rule below;
 // delete both once Craft accepts a path after the ref.
 const PUBLISH_BRANCH = 'cursor/pt-br-craft-e686';
+// The exemption is scoped to this repository. The same branch name under a
+// different owner is someone else's throwaway and should still be reported.
+const PUBLISH_REPO = 'pedrobastosribeiro/rokid_aiui';
 
 // Pinned so a CLI release cannot change what CI means without a commit.
 const AIX_CLI = '@yodaos-pkg/aix-cli@0.8.2';
@@ -420,19 +423,33 @@ const checks = {
 
       // A link into a review branch 404s the moment that branch is deleted.
       for (const match of read(file).matchAll(
-        /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
+        /https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
       )) {
-        // Drop the query and fragment before reading the ref. Without this,
-        // `/tree/main?tab=readme` parses as the ref "main?tab=readme", which
-        // matches neither the default branch nor a tag, so a correct link
-        // fails the check.
-        const target = match[1].split(/[?#]/)[0].replace(/\/+$/, '');
+        const [, owner, repo, rawTarget] = match;
+        // Everything after the ref that belongs to the prose rather than the
+        // link has to come off first. Without the query and fragment,
+        // `/tree/main?tab=readme` reads as the ref "main?tab=readme"; without
+        // the trailing punctuation, a bare URL ending a sentence reads as
+        // "main." Both match neither the default branch nor a tag, so a
+        // correct link fails the check.
+        const target = rawTarget
+          .split(/[?#]/)[0]
+          .replace(/[.,;:!\]]+$/, '')
+          .replace(/\/+$/, '');
         if (!target) continue;
-        if (target === PUBLISH_BRANCH || target.startsWith(`${PUBLISH_BRANCH}/`)) {
+
+        if (
+          `${owner}/${repo}`.toLowerCase() === PUBLISH_REPO &&
+          (target === PUBLISH_BRANCH || target.startsWith(`${PUBLISH_BRANCH}/`))
+        ) {
           continue;
         }
-        // Branch names can contain slashes, so this only identifies the simple
-        // cases; anything with a prefix falls through and is reported.
+
+        // `/tree/a/b/c` is ambiguous offline: branch "a" with path "b/c", or
+        // branch "a/b" with path "c". Taking the first segment therefore lets
+        // through a branch literally named something like "main/draft".
+        // Accepted -- disambiguating needs the GitHub API, and the miss is a
+        // branch name nobody picks by accident.
         const ref = target.split('/')[0];
         if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
         fail(`${file}: "${target}" points at a branch that will not outlive the review`);
