@@ -19,7 +19,7 @@ export const COPY = {
   asrLanguage: 'Este runtime não reconhece pt-BR. Tente de novo.',
   ttsUnavailable: 'Síntese de voz indisponível. A resposta fica só em texto.',
   ttsLangHint:
-    'O runtime ainda pode ignorar utterance.lang. O prompt do modelo já força pt-BR.',
+    'A leitura é em pt-BR. No Craft, a voz é a do celular — use Siri em português.',
   speakButton: 'Falar',
   stopButton: 'Parar',
   replayButton: 'Ouvir',
@@ -62,8 +62,8 @@ export function getSystemPrompt() {
     'Você é a voz dos óculos Rokid.',
     'Você é a comunicação dos óculos, não um aplicativo à parte.',
     'Fale sempre em português brasileiro (pt-BR).',
+    'Suas respostas serão lidas em voz alta: escreva frases naturais para falar, sem markdown nem URLs.',
     'Seja curto: o display é um HUD de 480×352 px.',
-    'Evite markdown, listas longas e emojis excessivos.',
     'Não misture inglês ou chinês, salvo nomes próprios.',
     'Se não entender, peça para repetir em uma frase só.',
   ].join(' ');
@@ -78,6 +78,51 @@ export function getLanguageModelOptions() {
       },
     ],
   };
+}
+
+export function isPortugueseVoice(voice) {
+  if (!voice) {
+    return false;
+  }
+  const lang = typeof voice.lang === 'string' ? voice.lang : '';
+  const name = typeof voice.name === 'string' ? voice.name : '';
+  return isPortuguese(lang) || /portugu|brazil|brasil|luciana|fernanda/i.test(name);
+}
+
+export function pickPortugueseVoice(voices) {
+  const list = Array.isArray(voices) ? voices : [];
+  const brazilian = list.find((voice) => normalizeLocale(voice.lang) === TARGET_LOCALE);
+  if (brazilian) {
+    return brazilian;
+  }
+  return list.find((voice) => isPortugueseVoice(voice)) || null;
+}
+
+function listHostVoices() {
+  try {
+    if (
+      typeof speechSynthesis !== 'undefined' &&
+      typeof speechSynthesis.getVoices === 'function'
+    ) {
+      const voices = speechSynthesis.getVoices();
+      return Array.isArray(voices) ? voices : [];
+    }
+  } catch (_) {
+    // Glasses runtime does not expose getVoices().
+  }
+  return [];
+}
+
+export function applyPortugueseSpeech(utterance) {
+  if (!utterance) {
+    return utterance;
+  }
+  utterance.lang = TARGET_LOCALE;
+  const voice = pickPortugueseVoice(listHostVoices());
+  if (voice) {
+    utterance.voice = voice;
+  }
+  return utterance;
 }
 
 function getErrorCode(error) {

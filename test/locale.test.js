@@ -5,12 +5,14 @@ import { test } from 'node:test';
 import {
   COPY,
   TARGET_LOCALE,
+  applyPortugueseSpeech,
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
   getSystemPrompt,
   isPortuguese,
   normalizeLocale,
+  pickPortugueseVoice,
 } from '../samples/pt-br/lib/locale.js';
 
 test('pins the glasses locale to pt-BR', () => {
@@ -45,7 +47,7 @@ test('forces the glasses voice into Brazilian Portuguese', () => {
   const prompt = getSystemPrompt();
   assert.match(prompt, /voz dos óculos Rokid/);
   assert.match(prompt, /português brasileiro \(pt-BR\)/);
-  assert.match(prompt, /não um aplicativo à parte/);
+  assert.match(prompt, /lidas em voz alta/);
 
   const options = getLanguageModelOptions();
   assert.equal(options.initialPrompts[0].role, 'system');
@@ -86,9 +88,21 @@ const inkSource = readFileSync(
   'utf8',
 );
 
-test('the voice loop pins ASR and TTS to the target locale', () => {
-  assert.match(inkSource, /recognition\.lang = TARGET_LOCALE/);
-  assert.match(inkSource, /utterance\.lang = TARGET_LOCALE/);
+test('picks a Brazilian Portuguese host voice when one exists', () => {
+  const voices = [
+    { lang: 'en-US', name: 'Samantha' },
+    { lang: 'pt-BR', name: 'Luciana' },
+    { lang: 'pt-PT', name: 'Joana' },
+  ];
+  assert.equal(pickPortugueseVoice(voices).name, 'Luciana');
+  assert.equal(pickPortugueseVoice([{ lang: 'pt-PT', name: 'Joana' }]).name, 'Joana');
+  assert.equal(pickPortugueseVoice([{ lang: 'en-US', name: 'Samantha' }]), null);
+});
+
+test('applies pt-BR to an utterance even when the host has no voice list', () => {
+  const utterance = { lang: 'en-US', voice: null };
+  applyPortugueseSpeech(utterance);
+  assert.equal(utterance.lang, 'pt-BR');
 });
 
 test('the voice loop starts listening on load and guards unload', () => {
@@ -100,6 +114,8 @@ test('the voice loop routes ASR failures through the localized map', () => {
   assert.match(inkSource, /getAsrFailureMessage\(/);
 });
 
-test('TTS is dispatched immediately rather than queued', () => {
+test('the voice loop pins ASR and spoken TTS to Portuguese', () => {
+  assert.match(inkSource, /recognition\.lang = TARGET_LOCALE/);
+  assert.match(inkSource, /applyPortugueseSpeech\(utterance\)/);
   assert.match(inkSource, /speechSynthesis\.speak\(utterance, 'immediate'\)/);
 });

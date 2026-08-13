@@ -27,7 +27,7 @@ After that, waking **Hi Rokid** should already talk in Portuguese. Use this agen
 | HUD / glasses copy | `lib/locale.js` + `AGENTS.md` | Strings and system instructions in pt-BR |
 | ASR | `recognition.lang = 'pt-BR'` | Host ASR is asked for Brazilian Portuguese. If the host has no pt-BR model, it may fall back to its default language. |
 | LLM | `LanguageModel.create({ initialPrompts })` | The model is instructed to always reply in pt-BR as the glasses' voice |
-| TTS | `utterance.lang = 'pt-BR'`, `speak(utterance, 'immediate')` | The field is set, but the current runtime may still ignore `lang` / `voice`. `'immediate'` is required because `speak()` defaults to `'enqueue'` and `cancel()` is not exposed, so replies would otherwise stack behind stale audio. |
+| TTS | `applyPortugueseSpeech()` + `speak(..., 'immediate')` | `lang` is pinned to `pt-BR`. If the host exposes `getVoices()`, a Portuguese voice is selected. On Craft, the spoken voice is the phone/browser voice — set Siri to Portuguese. On glasses, native `lang`/`voice` may still be ignored; keep Hi Rokid in Português. |
 
 The page also prints `navigator.language` so you can compare the **host language** with the **requested speech language**.
 
