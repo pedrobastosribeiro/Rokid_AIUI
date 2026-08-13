@@ -25,9 +25,12 @@ import {
   isPortuguese,
 } from '../../lib/locale.js';
 
-// The HUD is 480 x 352 px, and WXSS confirms neither `overflow` nor
-// `max-height`, so text is clamped before it reaches the view. The full text
-// is still sent to the model and to TTS.
+// The HUD is 480 x 352 px. Text is clamped before it reaches the view so the
+// truncation is visible ("…") and so it holds even on hosts that ignore
+// `overflow` / `max-height` — neither is on the confirmed WXSS property list,
+// where the CSS below is the backstop. Roughly four lines at 14px; keep it in
+// step with `.body { max-height }`. The full text still goes to the model and
+// to TTS.
 const MAX_HUD_CHARS = 220;
 
 function normalizeText(value) {
@@ -52,21 +55,23 @@ function getErrorMessage(error) {
   if (typeof error === 'string') {
     return error;
   }
-  return error.message || error.errMsg || String(error);
+  const code = typeof error.error === 'string' ? error.error : '';
+  const message = error.message || error.errMsg || '';
+  if (code && message) {
+    return `${code}: ${message}`;
+  }
+  return message || code || String(error);
 }
 
 // A `SpeechRecognitionErrorEvent` carries its diagnostic in `error`, not in
-// `message`, so `getErrorMessage()` would stringify the event object here.
+// `message`. `getErrorMessage()` reads both, but a bare code like 'no-speech'
+// is not a sentence, so the HUD gets a Portuguese wrapper around it. Skipping
+// the call when neither field is present avoids falling back to `String(event)`.
 function getRecognitionErrorMessage(event) {
-  const code = event && typeof event.error === 'string' ? event.error : '';
-  const detail = event && typeof event.message === 'string' ? event.message : '';
-  if (code && detail) {
-    return `${COPY.recognitionFailed} (${code}: ${detail})`;
-  }
-  if (code) {
-    return `${COPY.recognitionFailed} (${code})`;
-  }
-  return COPY.recognitionFailed;
+  const hasDetail = Boolean(event && (typeof event.error === 'string' || event.message));
+  return hasDetail
+    ? `${COPY.recognitionFailed} (${getErrorMessage(event)})`
+    : COPY.recognitionFailed;
 }
 
 function extractTranscript(event) {
@@ -127,6 +132,7 @@ export default {
 
   async onLoad(query) {
     this.pageActive = true;
+    this.initializing = true;
     this.session = null;
     this.recognition = null;
     this.finalTranscript = '';
@@ -148,15 +154,16 @@ export default {
         typeof SpeechSynthesisUtterance !== 'undefined',
     });
 
+    const initialPrompt = normalizeText(query && query.prompt);
     await this.refreshAvailability();
-    // A temple-button press or a voice wakeup can open a turn while the
-    // availability round trip above is still pending. Only one request may be
-    // active per session, so the query prompt yields to a turn already running.
-    if (!this.pageActive || this.data.isBusy || this.promptInFlight) {
+    if (!this.pageActive) {
       return;
     }
 
-    const initialPrompt = normalizeText(query && query.prompt);
+    // `initializing` gates the temple button and voice wakeup until this point,
+    // so the query prompt cannot race a turn opened during the availability
+    // round trip above and issue a second request on the same session.
+    this.initializing = false;
     if (initialPrompt) {
       this.setData({ liveTranscript: clampForHud(initialPrompt) });
       await this.answerPrompt(initialPrompt);
@@ -165,6 +172,7 @@ export default {
 
   onUnload() {
     this.pageActive = false;
+    this.initializing = false;
     this.activeTurnId += 1;
     this.promptInFlight = false;
     this.cancelRecognition({ discarded: true });
@@ -192,12 +200,15 @@ export default {
   },
 
   onVoiceWakeup() {
-    if (!this.data.isBusy && !this.promptInFlight) {
+    if (!this.initializing && !this.data.isBusy && !this.promptInFlight) {
       this.startTalk();
     }
   },
 
   onKeyUp(event) {
+    if (this.initializing) {
+      return;
+    }
     // `Enter` is left to the host on purpose: its default behavior is to enter
     // navigation mode or activate the focused target, which is the only way to
     // reach the buttons below on a device with no touchscreen. The temple
@@ -258,6 +269,9 @@ export default {
   },
 
   startTalk() {
+    if (this.initializing) {
+      return;
+    }
     if (!this.data.asrAvailable) {
       this.setData({ lastError: COPY.asrUnavailable });
       return;
@@ -446,6 +460,8 @@ export default {
       utterance.volume = 1.0;
       // `speak()` defaults to 'enqueue' and `cancel()` is not exposed yet, so
       // without 'immediate' every reply and replay stacks behind stale audio.
+      // Both call sites want to cut over to the newest utterance, so the mode
+      // is fixed here rather than exposed as an option.
       speechSynthesis.speak(utterance, 'immediate');
     } catch (error) {
       this.setData({ lastError: getErrorMessage(error) });
@@ -458,6 +474,7 @@ export default {
     if (this.data.isBusy || this.promptInFlight) {
       return;
     }
+    // Replays the unclamped reply, not the HUD copy.
     if (this.speakReply(this.lastReplyText)) {
       this.setData({ status: COPY.speaking });
     }
@@ -563,9 +580,11 @@ export default {
 
 .panel {
   flex-shrink: 1;
+  min-height: 0;
   padding: 8px 10px;
   border: 1px solid var(--ink-24);
   background: var(--ink-12);
+  overflow: hidden;
 }
 
 .label {
@@ -580,6 +599,10 @@ export default {
 }
 
 .body {
+  /* Backstop for the JS clamp; four lines at line-height 1.4, which keeps both
+     panels plus the chrome inside 352px. Keep in step with MAX_HUD_CHARS. */
+  max-height: 5.6em;
+  overflow: hidden;
   font-size: 14px;
   line-height: 1.4;
   color: var(--ink-72);
