@@ -6,12 +6,15 @@ name: Sync Craft pt-BR branch
 # packable agent so the import URL is /tree/pt-br.
 
 on:
+  # Deliberately every push to main, with no `paths:` filter. A subtree split
+  # that republishes an identical tree is a no-op, so running always is what
+  # makes the branch self-healing: if one run fails, is cancelled, or someone
+  # force-pushes over pt-br by hand, the next commit to main repairs it. With a
+  # paths filter the branch could only be repaired by another edit to the
+  # sample, which is how a stale import URL survives unnoticed.
   push:
     branches:
       - main
-    paths:
-      - 'samples/pt-br/**'
-      - '.github/workflows/sync-craft-pt-br.yml'
   workflow_dispatch:
 
 permissions:
@@ -34,8 +37,32 @@ jobs:
       - name: Split and force-push the Craft branch
         run: |
           set -euo pipefail
+          if [ ! -d samples/pt-br ]; then
+            echo "::error::samples/pt-br does not exist, so the split below cannot run and refs/heads/pt-br will keep serving the old sample. README.md, README.zh-CN.md and both quickstarts document that branch as the Craft import URL -- move --prefix here and update those URLs in the same change."
+            exit 1
+          fi
           git subtree split --prefix=samples/pt-br -b pt-br-craft-split
           git push --force origin pt-br-craft-split:refs/heads/pt-br
+
+      # The push reporting success is not the same as the branch carrying it: a
+      # ruleset, a protection rule or a concurrent force-push can leave the ref
+      # somewhere else. Verify here rather than from the PR checks, because this
+      # is the job that holds `contents: write` and can be re-run by whoever
+      # sees it go red.
+      - name: Verify the branch carries the split
+        run: |
+          set -euo pipefail
+          # Trees, not commit ids. A split reuses the prefix's tree object
+          # verbatim, so the tree is stable across runs, while the synthesized
+          # commit id is not -- comparing commits reports a false mismatch on
+          # any re-run. Content landing is what this is asserting anyway.
+          git fetch --no-tags origin refs/heads/pt-br
+          want="$(git rev-parse pt-br-craft-split^{tree})"
+          got="$(git rev-parse FETCH_HEAD^{tree})"
+          if [ "$want" != "$got" ]; then
+            echo "::error::refs/heads/pt-br carries tree $got, expected $want. The push reported success but the branch does not have it. https://github.com/${{ github.repository }}/tree/pt-br is serving a different sample than main. Re-run this workflow."
+            exit 1
+          fi
           {
             echo "### Craft import URL"
             echo ""
@@ -44,4 +71,6 @@ jobs:
             echo '```'
             echo "https://github.com/${{ github.repository }}/tree/pt-br"
             echo '```'
+            echo ""
+            echo "Verified: the branch carries tree \`$got\`."
           } >> "$GITHUB_STEP_SUMMARY"
