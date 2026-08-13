@@ -104,6 +104,7 @@ export default {
 
   async onLoad(query) {
     this.pageActive = true;
+    this.initializing = true;
     this.session = null;
     this.recognition = null;
     this.finalTranscript = '';
@@ -123,12 +124,13 @@ export default {
         typeof SpeechSynthesisUtterance !== 'undefined',
     });
 
+    const initialPrompt = normalizeText(query && query.prompt);
     await this.refreshAvailability();
     if (!this.pageActive) {
       return;
     }
 
-    const initialPrompt = normalizeText(query && query.prompt);
+    this.initializing = false;
     if (initialPrompt) {
       this.setData({ liveTranscript: initialPrompt });
       await this.answerPrompt(initialPrompt);
@@ -137,6 +139,7 @@ export default {
 
   onUnload() {
     this.pageActive = false;
+    this.initializing = false;
     this.activeTurnId += 1;
     this.promptInFlight = false;
     this.cancelRecognition({ discarded: true });
@@ -159,12 +162,15 @@ export default {
   },
 
   onVoiceWakeup() {
-    if (!this.data.isBusy && !this.promptInFlight) {
+    if (!this.initializing && !this.data.isBusy && !this.promptInFlight) {
       this.startTalk();
     }
   },
 
   onKeyUp(event) {
+    if (this.initializing) {
+      return;
+    }
     if (event.code === 'Enter' || event.code === 'GlobalHook') {
       event.preventDefault();
       if (this.data.isBusy) {
@@ -220,6 +226,9 @@ export default {
   },
 
   startTalk() {
+    if (this.initializing) {
+      return;
+    }
     if (!this.data.asrAvailable) {
       this.setData({ lastError: COPY.asrUnavailable });
       return;
@@ -501,9 +510,11 @@ export default {
 }
 
 .panel {
+  min-height: 0;
   padding: 8px 10px;
   border: 1px solid var(--ink-24);
   background: var(--ink-12);
+  overflow: hidden;
 }
 
 .label {
@@ -518,6 +529,8 @@ export default {
 }
 
 .body {
+  max-height: 2.8em;
+  overflow: hidden;
   font-size: 14px;
   line-height: 1.4;
   color: var(--ink-72);
