@@ -104,6 +104,7 @@ export function pickPortugueseVoice(voices) {
 // query.prompt one dispatched during startup -- in the default voice, which is
 // the exact outcome selecting a Portuguese voice exists to avoid.
 const VOICES_READY_TIMEOUT_MS = 1000;
+const VOICES_POLL_MS = 50;
 
 function speechSynthesisApi() {
   try {
@@ -134,15 +135,18 @@ function listHostVoices() {
 
 let pendingVoices = null;
 
-// Resolves with the host voices once they exist, or once the timeout expires.
-// Call it during startup so the wait overlaps work that is already happening
-// and no utterance is ever delayed by it. Cheap to call repeatedly: it returns
-// immediately once voices are present, and a host with no voice list at all
-// (the glasses runtime) resolves on the spot with an empty list.
+// Resolves once a Portuguese voice is available, or once the timeout expires.
+// Start it at load without awaiting, then await it immediately before speaking:
+// by then it is all but always resolved, and the page never gates user input on
+// it. Cheap to call repeatedly, and a host with no voice registry at all -- the
+// glasses runtime -- resolves on the spot with an empty list.
 export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
-  const present = listHostVoices();
-  if (present.length || !speechSynthesisApi()) {
-    return Promise.resolve(present);
+  // Ready means a *Portuguese* voice exists, not merely some voice. Hosts
+  // publish in stages -- English first, pt-BR on a later event is common --
+  // and settling on the first non-empty list would speak the opening reply in
+  // English, which is the whole thing this is here to prevent.
+  if (pickPortugueseVoice(listHostVoices()) || !speechSynthesisApi()) {
+    return Promise.resolve(listHostVoices());
   }
   if (pendingVoices) {
     return pendingVoices;
@@ -152,18 +156,22 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
   pendingVoices = new Promise((resolve) => {
     let settled = false;
     let timer = null;
+    let poll = null;
     const finish = () => {
       if (settled) {
         return;
       }
       settled = true;
-      // Drop the timer when the event wins, so it does not sit pending.
+      // Drop both waits when whichever one wins, so neither sits pending.
       if (timer !== null) {
         clearTimeout(timer);
       }
+      if (poll !== null) {
+        clearTimeout(poll);
+      }
       try {
         if (typeof api.removeEventListener === 'function') {
-          api.removeEventListener('voiceschanged', finish);
+          api.removeEventListener('voiceschanged', onVoicesChanged);
         }
       } catch (_) {
         // Nothing to detach.
@@ -176,13 +184,48 @@ export function ensureVoicesReady(timeoutMs = VOICES_READY_TIMEOUT_MS) {
       resolve(listHostVoices());
     };
 
+    // Settle only once Portuguese is actually there. `voiceschanged` can fire
+    // several times as the host fills the registry, so the handler checks
+    // rather than assuming the first event is the last.
+    const onVoicesChanged = () => {
+      settleIfPortuguese();
+    };
+    const settleIfPortuguese = () => {
+      if (pickPortugueseVoice(listHostVoices())) {
+        finish();
+        return true;
+      }
+      return false;
+    };
+
     try {
       if (typeof api.addEventListener === 'function') {
-        api.addEventListener('voiceschanged', finish);
+        api.addEventListener('voiceschanged', onVoicesChanged);
       }
     } catch (_) {
-      // No event support; the timeout is the only path out.
+      // No event support; the poll and timeout below are the only paths out.
     }
+
+    // `voiceschanged` is not guaranteed. Some hosts fill the registry as a
+    // side effect of the first getVoices() call and never fire it, and the
+    // call at the top of this function may itself be what triggered that. So
+    // re-read before committing to a wait, then poll -- otherwise those hosts
+    // sit out the whole timeout with a Portuguese voice already available.
+    if (settleIfPortuguese()) {
+      return;
+    }
+    // A rescheduled setTimeout rather than setInterval: neither is in the
+    // documented capability scope, but setTimeout is the one the official
+    // create-aiui-agent template already relies on.
+    const pollOnce = () => {
+      if (settled || settleIfPortuguese()) {
+        return;
+      }
+      poll = setTimeout(pollOnce, VOICES_POLL_MS);
+    };
+    poll = setTimeout(pollOnce, VOICES_POLL_MS);
+    // The timeout settles regardless: no Portuguese voice is a valid outcome,
+    // and `lang` still gets pinned.
     timer = setTimeout(finish, timeoutMs);
   });
 

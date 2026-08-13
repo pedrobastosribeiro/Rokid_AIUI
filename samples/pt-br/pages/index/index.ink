@@ -188,11 +188,13 @@ export default {
     });
 
     const initialPrompt = normalizeText(query && query.prompt);
-    // Warm the host voice list here rather than at the first speak(): browsers
-    // populate it asynchronously, so reading it later would speak the opening
-    // reply in the default voice. Running it alongside the availability round
-    // trip means it costs no extra wall clock in the normal case.
-    await Promise.all([this.refreshAvailability(), ensureVoicesReady()]);
+    // Start warming the host voice list, but do not await it here. Browsers
+    // populate it asynchronously, and blocking `initializing` on it would
+    // reject the temple button, voice wakeup and ASR for up to a second over a
+    // TTS nicety. answerPrompt() awaits it just before speaking instead, by
+    // which point a model round trip has already passed.
+    ensureVoicesReady();
+    await this.refreshAvailability();
     if (!this.pageActive) {
       return;
     }
@@ -464,6 +466,13 @@ export default {
       }
       this.lastReplyText = reply;
       this.setData({ lastReply: clampForHud(reply) || '(sem texto)' });
+      // Warmed since load, so this is normally already resolved. Awaiting it
+      // here rather than at load keeps the wait off the input path: delaying
+      // speech by a moment is harmless, delaying the microphone is not.
+      await ensureVoicesReady();
+      if (!this.isTurnCurrent(currentTurnId)) {
+        return;
+      }
       const speaking = this.speakReply(reply);
       // No utterance lifecycle event is exposed yet, so the turn is released as
       // soon as playback is dispatched. The HUD stays on "Falando…" until the

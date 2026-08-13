@@ -184,3 +184,56 @@ test('gives up after the timeout when no voices ever arrive', async () => {
     assert.ok(elapsedMs < 1000, `waited ${elapsedMs}ms, should honour the 20ms timeout`);
   });
 });
+
+test('resolves without voiceschanged when the host fills the list silently', async () => {
+  // Some hosts populate the registry as a side effect of the first getVoices()
+  // call and never fire the event. Polling is the only way out short of the
+  // full timeout.
+  let calls = 0;
+  const stub = {
+    getVoices() {
+      calls += 1;
+      return calls > 2 ? [{ lang: 'pt-BR', name: 'Luciana' }] : [];
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  await withSpeechSynthesis(stub, async () => {
+    const started = process.hrtime.bigint();
+    const voices = await ensureVoicesReady(5000);
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    assert.equal(voices.length, 1);
+    assert.ok(elapsedMs < 2000, `waited ${elapsedMs}ms; polling should beat the 5000ms timeout`);
+  });
+});
+
+test('keeps waiting when the host publishes English before Portuguese', async () => {
+  // Staged publication is common: English lands on the first voiceschanged,
+  // pt-BR on a later one. Settling on the first non-empty list would speak the
+  // opening reply in English.
+  let voices = [];
+  const handlers = [];
+  const stub = {
+    getVoices: () => voices,
+    addEventListener(name, handler) {
+      if (name === 'voiceschanged') handlers.push(handler);
+    },
+    removeEventListener() {},
+  };
+
+  await withSpeechSynthesis(stub, async () => {
+    const ready = ensureVoicesReady(5000);
+
+    voices = [{ lang: 'en-US', name: 'Samantha' }];
+    handlers.forEach((h) => h());
+    // Still pending: nothing Portuguese yet.
+    const raced = await Promise.race([ready, Promise.resolve('pending')]);
+    assert.equal(raced, 'pending', 'settled on an English-only registry');
+
+    voices = [...voices, { lang: 'pt-BR', name: 'Luciana' }];
+    handlers.forEach((h) => h());
+    const resolved = await ready;
+    assert.equal(pickPortugueseVoice(resolved).name, 'Luciana');
+  });
+});
