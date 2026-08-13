@@ -2,7 +2,7 @@
 
 AIUI does not install a firmware language pack. To talk with the glasses in a language such as Brazilian Portuguese, configure **three separate layers**: the host app language, speech input/output, and the model prompt.
 
-This page uses **`pt-BR`** as the first localization to deploy. A runnable implementation lives in [`samples/pt-br`](https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-locale-sample-e686/samples/pt-br).
+This page uses **`pt-BR`** as the first localization to deploy. A runnable implementation lives in [`samples/pt-br`](../../../../samples/pt-br).
 
 ## 1. Host language
 

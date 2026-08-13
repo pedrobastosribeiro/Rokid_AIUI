@@ -10,6 +10,13 @@ export const COPY = {
   emptyTranscript: 'Não reconheci a fala. Tente de novo.',
   llmUnavailable: 'O modelo de linguagem não está disponível neste runtime.',
   asrUnavailable: 'Reconhecimento de fala indisponível.',
+  asrFailed: 'Falha no reconhecimento de fala. Tente de novo.',
+  asrNoSpeech: 'Não ouvi nada. Tente de novo.',
+  asrAborted: 'Reconhecimento interrompido. Tente de novo.',
+  asrAudioCapture: 'Não consegui usar o microfone. Tente de novo.',
+  asrNetwork: 'Falha de rede no reconhecimento. Tente de novo.',
+  asrNotAllowed: 'Permissão de microfone negada. Tente de novo.',
+  asrLanguage: 'Este runtime não reconhece pt-BR. Tente de novo.',
   ttsUnavailable: 'Síntese de voz indisponível. A resposta fica só em texto.',
   ttsLangHint:
     'O runtime ainda pode ignorar utterance.lang. O prompt do modelo já força pt-BR.',
@@ -84,4 +91,32 @@ export function getLanguageModelOptions() {
       },
     ],
   };
+}
+
+function getErrorCode(error) {
+  if (!error || typeof error === 'string') {
+    return '';
+  }
+  return typeof error.error === 'string' ? error.error : '';
+}
+
+export function getAsrFailureMessage(error) {
+  const code = getErrorCode(error);
+  switch (code) {
+    case 'no-speech':
+      return COPY.asrNoSpeech;
+    case 'aborted':
+      return COPY.asrAborted;
+    case 'audio-capture':
+      return COPY.asrAudioCapture;
+    case 'network':
+      return COPY.asrNetwork;
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return COPY.asrNotAllowed;
+    case 'language-not-supported':
+      return COPY.asrLanguage;
+    default:
+      return COPY.asrFailed;
+  }
 }
