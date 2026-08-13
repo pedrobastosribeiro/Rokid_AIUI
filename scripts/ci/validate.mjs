@@ -428,11 +428,13 @@ const checks = {
       )) {
         const [, owner, repo, rawTarget] = match;
         // Trailing characters may belong to the prose or to the ref, and which
-        // one depends on how the URL was written. A `)` or `>` right after the
-        // match means the link was delimited, so its boundary is already known
-        // and every remaining character is part of the target.
-        const after = text[match.index + match[0].length];
-        const delimited = after === ')' || after === '>';
+        // one depends on how the URL was written. Read that from the character
+        // *before* the match: `(` or `<` means the destination is delimited, so
+        // its boundary is already known and everything in it is the target.
+        // Looking at the following character instead would misread Markdown's
+        // optional title -- in `[x](URL "title")` the match stops at the space.
+        const before = text[match.index - 1];
+        const delimited = before === '(' || before === '<';
 
         let target = rawTarget.split(/[?#]/)[0];
         // git check-ref-format: a ref can contain neither `:` nor a trailing
@@ -461,8 +463,9 @@ const checks = {
         const ref = target.split('/')[0];
         // A commit permalink is the most durable link there is, and rejecting
         // it inverted the point of the rule. A 40-hex ref is a SHA; the short
-        // forms GitHub renders are 7 or more.
-        if (/^[0-9a-f]{7,40}$/.test(ref)) continue; // immutable commit
+        // forms GitHub renders are 7 or more. Case-insensitive, since object
+        // IDs resolve that way.
+        if (/^[0-9a-f]{7,40}$/i.test(ref)) continue; // immutable commit
         if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
         fail(`${file}: "${target}" points at a branch that will not outlive the review`);
       }
