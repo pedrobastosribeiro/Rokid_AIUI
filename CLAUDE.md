@@ -17,7 +17,7 @@ Checks are `json`, `syntax`, `samples`, `whitespace`, `tests`, `pack`, `links`. 
 
 The validator is deliberately dependency-free — the repo ships no tooling lockfile. Keep it that way; a new check should use Node built-ins and `git ls-files`.
 
-`.github/workflows/daily-build.yml` publishes `create-aiui-agent` to npm nightly and gates on these checks. A red run blocks the release.
+Publishing `create-aiui-agent` to npm gates on these checks, so a red run blocks the release. The publish is triggered by bumping `version` in `packages/create-aiui-agent/package.json` on `main`; it skips itself when that version is already on the registry.
 
 ## `AGENTS.md` is a format, not a readme
 
