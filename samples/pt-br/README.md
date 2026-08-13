@@ -27,7 +27,7 @@ After that, waking **Hi Rokid** should already talk in Portuguese. Use this agen
 | HUD / glasses copy | `lib/locale.js` + `AGENTS.md` | Strings and system instructions in pt-BR |
 | ASR | `recognition.lang = 'pt-BR'` | Host ASR is asked for Brazilian Portuguese. If the host has no pt-BR model, it may fall back to its default language. |
 | LLM | `LanguageModel.create({ initialPrompts })` | The model is instructed to always reply in pt-BR as the glasses' voice |
-| TTS | `utterance.lang = 'pt-BR'` | The field is set, but the current runtime may still ignore `lang` / `voice` |
+| TTS | `utterance.lang = 'pt-BR'`, `speak(utterance, 'immediate')` | The field is set, but the current runtime may still ignore `lang` / `voice`. `'immediate'` is required because `speak()` defaults to `'enqueue'` and `cancel()` is not exposed, so replies would otherwise stack behind stale audio. |
 
 The page also prints `navigator.language` so you can compare the **host language** with the **requested speech language**.
 
@@ -40,6 +40,10 @@ The page also prints `navigator.language` so you can compare the **host language
    - transcript language
    - model reply language
    - spoken reply (if the host TTS honors `lang`)
+
+`Enter` is deliberately not intercepted: it is what puts the host into navigation
+mode, which is the only way to reach the buttons on a device with no touchscreen.
+The temple button (`GlobalHook`) starts and stops a turn directly.
 
 From the repository root, `npm test` runs locale unit tests, sample structure checks, and `aix pack`.
 
@@ -60,6 +64,7 @@ aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 
 ```text
 samples/pt-br/
+  .aixignore             # keeps docs out of the packed .aix
   AGENTS.md              # glasses identity + system prompts in pt-BR
   app.json
   app.js

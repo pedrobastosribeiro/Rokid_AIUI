@@ -45,6 +45,29 @@ jobs:
       - name: Markdown links resolve
         run: node scripts/ci/validate.mjs links
 
+      - name: No trailing whitespace in source
+        run: node scripts/ci/validate.mjs whitespace
+
+      - name: Unit tests
+        run: node scripts/ci/validate.mjs tests
+
+  pack:
+    name: Pack every sample
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Its own job because it fetches aix-cli and packs every sample, which is
+      # far slower than the static checks above.
+      - name: Pack and inspect
+        run: node scripts/ci/validate.mjs pack
+
   scaffold:
     name: Scaffold a project from the packed package
     runs-on: ubuntu-latest

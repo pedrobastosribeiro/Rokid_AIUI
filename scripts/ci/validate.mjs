@@ -305,7 +305,9 @@ const checks = {
   // Unit tests, wherever they are. No-op until a test/ directory exists, so
   // this stays the single entry point rather than a second command to run.
   tests(fail, note) {
-    const files = tracked('test/**/*.test.js', 'test/**/*.test.mjs');
+    // Filter rather than glob: a git pathspec of test/**/*.test.js needs an
+    // intervening directory, so it would silently miss test/locale.test.js.
+    const files = tracked('test/').filter((file) => /\.test\.(js|mjs)$/.test(file));
     if (!files.length) {
       note('no test files tracked');
       return;

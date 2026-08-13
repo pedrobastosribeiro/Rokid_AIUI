@@ -37,18 +37,6 @@ export function getHostLanguage() {
   return '';
 }
 
-export function getHostLanguages() {
-  try {
-    if (typeof navigator !== 'undefined' && Array.isArray(navigator.languages)) {
-      return navigator.languages.filter((item) => typeof item === 'string');
-    }
-  } catch (_) {
-    // Ignore hosts that do not expose a language list.
-  }
-  const primary = getHostLanguage();
-  return primary ? [primary] : [];
-}
-
 export function normalizeLocale(tag) {
   if (!tag || typeof tag !== 'string') {
     return '';
@@ -67,10 +55,6 @@ export function normalizeLocale(tag) {
 export function isPortuguese(tag) {
   const normalized = normalizeLocale(tag);
   return normalized === 'pt' || normalized.startsWith('pt-');
-}
-
-export function getSpeechLang(preferred = TARGET_LOCALE) {
-  return preferred || TARGET_LOCALE;
 }
 
 export function getSystemPrompt() {

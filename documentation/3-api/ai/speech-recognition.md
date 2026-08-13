@@ -17,7 +17,6 @@
 
 ```javascript
 const recognition = new SpeechRecognition();
-recognition.lang = 'pt-BR';
 ```
 
 ## 基本用法
