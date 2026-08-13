@@ -69,11 +69,19 @@ If on-device TTS stays in the wrong language, use a cloud TTS voice that support
 
 ## 5. Deploy the glasses voice loop
 
+From a computer:
+
 ```bash
 aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-Then upload the package in [AIUI Studio Global](https://aiui-global.rokid.com/), update the glasses resource package, and speak Portuguese. Name the Studio application as the glasses voice (for example **Óculos Rokid**), not as a specialty assistant.
+From [Craft Global](https://js.rokid.com/craft?region=global), do not import `/tree/main/samples/pt-br`. Craft treats that path as a git ref and returns `GitHub ref not found: main/samples/pt-br`. Paste:
+
+```text
+https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-craft-e686
+```
+
+That branch has `app.json` at the repository root. Then pack in Craft, upload to an AIUI Agent named **Óculos Rokid** in [AIUI Studio Global](https://aiui-global.rokid.com/), and on the glasses run **Settings → Developer → AIUI → Update Glasses Resource Package**.
 
 ## Continue Reading
 

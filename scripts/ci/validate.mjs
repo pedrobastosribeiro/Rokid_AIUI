@@ -413,10 +413,21 @@ const checks = {
       }
 
       // A link into a review branch 404s the moment that branch is deleted.
-      for (const match of read(file).matchAll(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:tree|blob)\/([\w./-]+?)\//g)) {
-        const ref = match[1];
+      // cursor/pt-br-craft-e686 is a long-lived publish branch: Craft cannot
+      // import /tree/main/samples/pt-br (it looks up that whole string as a ref).
+      for (const match of read(file).matchAll(
+        /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:tree|blob)\/([^\s)`"'<>]+)/g,
+      )) {
+        const rest = match[1].replace(/\/$/, '');
+        if (
+          rest === 'cursor/pt-br-craft-e686' ||
+          rest.startsWith('cursor/pt-br-craft-e686/')
+        ) {
+          continue;
+        }
+        const ref = rest.split('/')[0];
         if (ref === 'main' || /^v?\d/.test(ref)) continue; // default branch or a tag
-        fail(`${file}: links into branch "${ref}", which will not outlive the review`);
+        fail(`${file}: links into branch "${rest}", which will not outlive the review`);
       }
     }
 

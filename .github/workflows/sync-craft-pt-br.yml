@@ -1,0 +1,38 @@
+name: Sync Craft pt-BR branch
+
+# Craft Global treats /tree/<ref>/<path> as a single git ref, so
+# github.com/.../tree/main/samples/pt-br looks up the branch
+# "main/samples/pt-br" and fails. Keep a branch whose root is the
+# packable agent so the import URL is /tree/cursor/pt-br-craft-e686.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'samples/pt-br/**'
+      - '.github/workflows/sync-craft-pt-br.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-craft-pt-br
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Publish samples/pt-br at the Craft branch root
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Split and force-push the Craft branch
+        run: |
+          set -euo pipefail
+          git subtree split --prefix=samples/pt-br -b pt-br-craft-split
+          git push --force origin pt-br-craft-split:cursor/pt-br-craft-e686

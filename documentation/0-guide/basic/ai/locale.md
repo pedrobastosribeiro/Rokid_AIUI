@@ -69,11 +69,19 @@ speechSynthesis.speak(utterance);
 
 ## 5. 发布眼镜语音循环
 
+在电脑上：
+
 ```bash
 aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-然后在 [AIUI Studio Global](https://aiui-global.rokid.com/) 上传安装包，更新眼镜资源包，并直接说葡萄牙语。在 Studio 里把应用命名为眼镜的声音（例如 **Óculos Rokid**），而不是一个专用助手。
+在 [Craft Global](https://js.rokid.com/craft?region=global) 中，不要导入 `/tree/main/samples/pt-br`。Craft 会把该路径当成 git ref，并报 `GitHub ref not found: main/samples/pt-br`。请粘贴：
+
+```text
+https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/cursor/pt-br-craft-e686
+```
+
+该分支的仓库根目录已包含 `app.json`。然后在 Craft 中打包，上传到 [AIUI Studio Global](https://aiui-global.rokid.com/) 中名为 **Óculos Rokid** 的 AIUI Agent，并在眼镜上执行 **Settings → Developer → AIUI → Update Glasses Resource Package**。
 
 ## 继续阅读
 
