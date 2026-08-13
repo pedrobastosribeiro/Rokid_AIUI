@@ -40,6 +40,12 @@ import {
 // The full text still goes to the model and to TTS.
 const MAX_HUD_CHARS = 100;
 
+// `lastError` carries host ASR and model text of unknown length, and `.error`
+// is chrome that does not shrink, so an unbounded diagnostic would push the
+// action row off the canvas -- the same failure the panel clamp prevents.
+// ~120 chars is about 1.5 lines at 11px.
+const MAX_ERROR_CHARS = 120;
+
 function normalizeText(value) {
   if (typeof value !== 'string') {
     return '';
@@ -47,27 +53,31 @@ function normalizeText(value) {
   return value.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function clampForHud(value) {
+function clampText(value, limit) {
   const text = normalizeText(value);
-  if (text.length <= MAX_HUD_CHARS) {
+  if (text.length <= limit) {
     return text;
   }
-  return `${text.slice(0, MAX_HUD_CHARS - 1).trimEnd()}…`;
+  return `${text.slice(0, limit - 1).trimEnd()}…`;
 }
 
-function getErrorMessage(error) {
+function clampForHud(value) {
+  return clampText(value, MAX_HUD_CHARS);
+}
+
+function getErrorMessage(error, limit = MAX_ERROR_CHARS) {
   if (!error) {
     return 'Erro desconhecido';
   }
   if (typeof error === 'string') {
-    return error;
+    return clampText(error, limit);
   }
   const code = typeof error.error === 'string' ? error.error : '';
   const message = error.message || error.errMsg || '';
   if (code && message) {
-    return `${code}: ${message}`;
+    return clampText(`${code}: ${message}`, limit);
   }
-  return message || code || String(error);
+  return clampText(message || code || String(error), limit);
 }
 
 // A `SpeechRecognitionErrorEvent` carries its diagnostic in `error`, not in
@@ -76,9 +86,13 @@ function getErrorMessage(error) {
 // the call when neither field is present avoids falling back to `String(event)`.
 function getRecognitionErrorMessage(event) {
   const hasDetail = Boolean(event && (typeof event.error === 'string' || event.message));
-  return hasDetail
-    ? `${COPY.recognitionFailed} (${getErrorMessage(event)})`
-    : COPY.recognitionFailed;
+  if (!hasDetail) {
+    return COPY.recognitionFailed;
+  }
+  // The retry sentence is the part the user acts on, so the diagnostic gets
+  // whatever room is left rather than the whole budget.
+  const room = Math.max(MAX_ERROR_CHARS - COPY.recognitionFailed.length - 3, 12);
+  return `${COPY.recognitionFailed} (${getErrorMessage(event, room)})`;
 }
 
 function extractTranscript(event) {
