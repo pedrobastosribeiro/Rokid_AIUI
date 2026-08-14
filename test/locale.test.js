@@ -116,27 +116,41 @@ test('the voice loop speaks the greeting on load, not only on replay', () => {
   // before the first model reply. Putting the glasses on should produce a
   // voice, so onLoad speaks it — and it must stay on the branch that has no
   // query.prompt, or a launch with a question gets a hello in front of it.
-  assert.match(inkSource, /this\.speakReply\(COPY\.greeting\);\s*\n\s*this\.startTalk\(\);/);
-  const [, beforeStartTalk] = inkSource.match(/(await this\.answerPrompt\(initialPrompt\);[\s\S]*?)this\.startTalk\(\);/);
-  assert.match(beforeStartTalk, /return;/, 'the query.prompt branch must return before the greeting');
+  assert.match(inkSource, /this\.speakReply\(COPY\.greeting\);\s*this\.startTalk\(\);/);
+  const branch = inkSource.match(
+    /await this\.answerPrompt\(initialPrompt\);([\s\S]*?)this\.speakReply\(COPY\.greeting\);/,
+  );
+  assert.ok(branch, 'expected answerPrompt to appear before the spoken greeting in onLoad');
+  assert.match(branch[1], /return;/, 'the query.prompt branch must return before the greeting');
 });
 
 test('the voice loop routes ASR failures through the localized map', () => {
   assert.match(inkSource, /getAsrFailureMessage\(/);
 });
 
-test('the system prompt asks for mineiro register and warns off caricature', () => {
-  // Word choice is the only accent lever available: utterance.voice and lang
+test('the system prompt starts neutral and mirrors the speaker, without caricature', () => {
+  // Word choice is the only register lever available: utterance.voice and lang
   // are not effective on the glasses and getVoices() is not exposed, so a
-  // future edit that neutralizes this prompt silently removes the only
-  // mineiro the wearer would ever hear.
+  // future edit that flattens this prompt silently removes the only adaptation
+  // the wearer would ever hear.
   const prompt = getSystemPrompt();
+  assert.match(prompt, /Comece em português neutro/);
   assert.match(prompt, /jeito mineiro/);
-  assert.match(prompt, /"cê"/);
-  assert.match(prompt, /tempero, não fantasia/);
+  assert.match(prompt, /paulista/);
+  // Three guards that keep mirroring from becoming mimicry.
+  assert.match(prompt, /sem sinal claro, siga no neutro/);
+  assert.match(prompt, /Nunca imite sotaque de novela/);
+  assert.match(prompt, /nunca comente o sotaque/);
   // The register must not cost the constraints it sits between.
   assert.match(prompt, /português brasileiro \(pt-BR\)/);
   assert.match(prompt, /Seja curto/);
+});
+
+test('the greeting stays neutral, because nothing has been heard yet', () => {
+  // It is spoken before the wearer says anything, so there is no register to
+  // mirror -- and it doubles as the Studio listing's opening monologue.
+  assert.doesNotMatch(COPY.greeting, /uai|sô\b|mano|trem\b/i);
+  assert.match(COPY.greeting, /português/);
 });
 
 test('the voice loop pins ASR and spoken TTS to Portuguese', () => {

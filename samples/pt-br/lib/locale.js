@@ -2,10 +2,13 @@ export const TARGET_LOCALE = 'pt-BR';
 
 export const COPY = {
   title: 'Óculos Rokid',
-  // Spoken on load, so it is the first thing the wearer hears -- it sets the
-  // register the model is told to keep, and a neutral line here followed by a
-  // mineiro reply is an audible seam.
-  greeting: 'Uai, cê chegou! Pode falar comigo em português.',
+  // Spoken at load when the page opens with no query.prompt -- a launch that
+  // already carries a question skips it and answers instead. So it is usually
+  // the first thing the wearer hears, and it is deliberately neutral: the agent
+  // has heard nothing yet, so it has no basis for a regional register. It picks
+  // one up from the wearer's own words and only then adapts. Also the string
+  // the Studio listing uses as its opening monologue, so the two stay in step.
+  greeting: 'Olá. Pode falar com os óculos em português.',
   idle: 'Pronto',
   listening: 'Ouvindo…',
   thinking: 'Pensando…',
@@ -60,21 +63,30 @@ export function isPortuguese(tag) {
   return normalized === 'pt' || normalized.startsWith('pt-');
 }
 
-// Register, not accent -- and the distinction is the whole reason this is a
-// prompt and not a setting. Pronunciation is picked by the voice, and no voice
-// is selectable here: `utterance.voice` and `lang` are documented as not
-// effective on the glasses and `getVoices()` is not exposed, so whatever the
-// host speaks with is what the wearer hears. Word choice is the only lever we
-// have, and it carries most of what reads as mineiro once a sentence is spoken
-// aloud. A phonetic accent would need a cloud TTS with a chosen voice, the way
-// samples/tts reaches Minimax.
+// The model mirrors the wearer's regional register. Two limits shape how this
+// is written, and both are worth knowing before editing it.
+//
+// It reads text, not audio. The model never hears the wearer -- it receives an
+// ASR transcript, so pronunciation, the part people actually mean by "accent",
+// is gone before it arrives. What survives is vocabulary, and only the part the
+// recognizer chose not to normalize: a pt-BR ASR often writes "você" for "cê"
+// and "não" for "num". So the signal is real but lossy, and the prompt asks for
+// a default rather than a guess.
+//
+// And nothing here selects a voice. `utterance.voice` and `lang` are documented
+// as not effective on the glasses and `getVoices()` is not exposed, so the reply
+// is spoken in whatever voice the host has, in whatever accent that voice has,
+// no matter which register the words are in. Matching the wearer phonetically
+// would need a cloud TTS with a chosen voice, the way samples/tts reaches
+// Minimax.
 export function getSystemPrompt() {
   return [
     'Você é a voz dos óculos Rokid.',
     'Você é a comunicação dos óculos, não um aplicativo à parte.',
     'Fale sempre em português brasileiro (pt-BR).',
-    'Fale no jeito mineiro: "cê" no lugar de "você", "uai" e "sô" quando couber, "trem" para coisa, diminutivo à vontade.',
-    'O sotaque é tempero, não fantasia: use quando cair natural, não em toda frase, e nunca imite caipira de novela.',
+    'Comece em português neutro, sem sotaque regional.',
+    'Repare no jeito de falar do usuário e acompanhe: com "uai", "trem", "sô", "bão", responda no jeito mineiro; com "mano", "meu", "tipo", "daí", acompanhe o paulista; com outro jeito, acompanhe esse.',
+    'Espelhe com moderação e só o que ouvir de fato; sem sinal claro, siga no neutro. Nunca imite sotaque de novela, e nunca comente o sotaque de quem fala.',
     'Suas respostas serão lidas em voz alta: escreva frases naturais para falar, sem markdown nem URLs.',
     'Seja curto: o display é um HUD de 480×352 px.',
     'Não misture inglês ou chinês, salvo nomes próprios.',
