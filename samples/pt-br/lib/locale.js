@@ -2,7 +2,10 @@ export const TARGET_LOCALE = 'pt-BR';
 
 export const COPY = {
   title: 'Óculos Rokid',
-  greeting: 'Olá. Pode falar com os óculos em português.',
+  // Spoken on load, so it is the first thing the wearer hears -- it sets the
+  // register the model is told to keep, and a neutral line here followed by a
+  // mineiro reply is an audible seam.
+  greeting: 'Uai, cê chegou! Pode falar comigo em português.',
   idle: 'Pronto',
   listening: 'Ouvindo…',
   thinking: 'Pensando…',
@@ -57,11 +60,21 @@ export function isPortuguese(tag) {
   return normalized === 'pt' || normalized.startsWith('pt-');
 }
 
+// Register, not accent -- and the distinction is the whole reason this is a
+// prompt and not a setting. Pronunciation is picked by the voice, and no voice
+// is selectable here: `utterance.voice` and `lang` are documented as not
+// effective on the glasses and `getVoices()` is not exposed, so whatever the
+// host speaks with is what the wearer hears. Word choice is the only lever we
+// have, and it carries most of what reads as mineiro once a sentence is spoken
+// aloud. A phonetic accent would need a cloud TTS with a chosen voice, the way
+// samples/tts reaches Minimax.
 export function getSystemPrompt() {
   return [
     'Você é a voz dos óculos Rokid.',
     'Você é a comunicação dos óculos, não um aplicativo à parte.',
     'Fale sempre em português brasileiro (pt-BR).',
+    'Fale no jeito mineiro: "cê" no lugar de "você", "uai" e "sô" quando couber, "trem" para coisa, diminutivo à vontade.',
+    'O sotaque é tempero, não fantasia: use quando cair natural, não em toda frase, e nunca imite caipira de novela.',
     'Suas respostas serão lidas em voz alta: escreva frases naturais para falar, sem markdown nem URLs.',
     'Seja curto: o display é um HUD de 480×352 px.',
     'Não misture inglês ou chinês, salvo nomes próprios.',

@@ -111,8 +111,32 @@ test('the voice loop starts listening on load and guards unload', () => {
   assert.match(inkSource, /this\.pageActive = false/);
 });
 
+test('the voice loop speaks the greeting on load, not only on replay', () => {
+  // The greeting used to reach the speaker only if the wearer pressed Ouvir
+  // before the first model reply. Putting the glasses on should produce a
+  // voice, so onLoad speaks it — and it must stay on the branch that has no
+  // query.prompt, or a launch with a question gets a hello in front of it.
+  assert.match(inkSource, /this\.speakReply\(COPY\.greeting\);\s*\n\s*this\.startTalk\(\);/);
+  const [, beforeStartTalk] = inkSource.match(/(await this\.answerPrompt\(initialPrompt\);[\s\S]*?)this\.startTalk\(\);/);
+  assert.match(beforeStartTalk, /return;/, 'the query.prompt branch must return before the greeting');
+});
+
 test('the voice loop routes ASR failures through the localized map', () => {
   assert.match(inkSource, /getAsrFailureMessage\(/);
+});
+
+test('the system prompt asks for mineiro register and warns off caricature', () => {
+  // Word choice is the only accent lever available: utterance.voice and lang
+  // are not effective on the glasses and getVoices() is not exposed, so a
+  // future edit that neutralizes this prompt silently removes the only
+  // mineiro the wearer would ever hear.
+  const prompt = getSystemPrompt();
+  assert.match(prompt, /jeito mineiro/);
+  assert.match(prompt, /"cê"/);
+  assert.match(prompt, /tempero, não fantasia/);
+  // The register must not cost the constraints it sits between.
+  assert.match(prompt, /português brasileiro \(pt-BR\)/);
+  assert.match(prompt, /Seja curto/);
 });
 
 test('the voice loop pins ASR and spoken TTS to Portuguese', () => {
