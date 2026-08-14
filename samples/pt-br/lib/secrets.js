@@ -12,9 +12,13 @@
 export const REMOTE_API_KEY = '';
 
 // Override the provider without editing code elsewhere. Leave the base URL empty
-// to use the default in `remote-model.js`. Pointing these at a gateway you own
-// is the intended end state: the device then carries a token you issue and can
-// revoke per device, and the provider key stays server-side where changing the
-// routing is a deploy instead of a device update.
+// to use the default in `remote-model.js`.
+//
+// The direct-to-provider path this defaults to is the deliberate choice here,
+// not a stepping stone: one hop, nothing to operate. Its cost is that the
+// provider key lives on the device and the prompt ships in the bundle, so
+// rotating either means a new build. A server of your own in front would move
+// both off the device, at the price of running one -- worth knowing as an option
+// if that cost ever starts to bite, not something this sample is heading toward.
 export const REMOTE_BASE_URL = '';
 export const REMOTE_MODEL = '';

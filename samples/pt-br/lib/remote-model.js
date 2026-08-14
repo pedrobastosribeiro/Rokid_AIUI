@@ -4,17 +4,13 @@ import { getJsonReplyInstruction, parseTwoChannelReply } from './reply-format.js
 import { REMOTE_API_KEY, REMOTE_BASE_URL, REMOTE_MODEL } from './secrets.js';
 
 // An OpenAI-compatible chat client, deliberately not a "Groq client". Base URL,
-// model and key are all configuration, so pointing this at a gateway you own
-// instead of at a provider directly is a config change rather than a code
-// change.
+// model and key are all configuration, so switching provider -- or putting a
+// server of your own in front -- is a config change rather than a code change.
 //
-// That distinction is the whole reason the shape is this way. Routing rules --
-// which model handles which kind of question -- change often, and anything that
-// lives in this bundle costs a Studio republish plus a device update every time
-// it moves. The same rule on a gateway is a deploy. Talking to the provider
-// directly is the right way to *test*; it is not where this should end up, for
-// the additional reason that a provider key on the device is a key you cannot
-// rotate without shipping a new build.
+// Keeping that seam costs nothing and is worth having, because the two things
+// most likely to change are exactly the two that live outside this file: which
+// model answers, and where the key is held. What the sample actually does is
+// call the provider directly, which is one hop and nothing to operate.
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 
 // Groq's free tier is 30 requests/minute and a few thousand tokens/minute
@@ -58,12 +54,10 @@ export function resolveApiKey() {
   return readStoredApiKey() || (REMOTE_API_KEY || '').trim();
 }
 
-// Provisioning is the unsolved half. This writes the key; getting it here in the
-// first place is the open question, and the answer should not be "hardcode it
-// above" -- the packed `.aix` travels to Studio, so a key in the bundle is a
-// published key. `samples/scanner` already reads QR codes through
-// `BarcodeDetector`, which is the path worth building: show the token on a
-// phone, look at it once, store it, never ship it.
+// Writing the key here rather than leaving it in `secrets.js` is what keeps it
+// out of the repository and out of the packed `.aix`, which travels to Studio.
+// Call this once from a temporary line, remove the line, rebuild: storage
+// survives the new build, so the key is on the device and in no commit.
 export function storeApiKey(value) {
   const key = typeof value === 'string' ? value.trim() : '';
   try {

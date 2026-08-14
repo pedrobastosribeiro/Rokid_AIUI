@@ -105,18 +105,19 @@ nothing and is fast enough that the extra round trip is not felt.
 Storage wins when both are set, so a properly provisioned device never silently
 falls back to a key that shipped in the bundle.
 
-Use a token you can revoke and do not reuse it elsewhere. A key in `secrets.js`
-travels inside the `.aix` to Studio, which means it is published, and rotating
-it means shipping a new build — fine for a bench test, wrong for anything else.
-The path worth building instead is a QR scan: `samples/scanner` already decodes
-one through `BarcodeDetector`, so the token can be shown on a phone, read once,
-and stored, without ever being committed.
+Use a key you can revoke and do not reuse it elsewhere. A key in `secrets.js`
+travels inside the `.aix` to Studio, which means it is published, and rotating it
+means shipping a new build — fine for a bench test, wrong to leave in place.
+Provisioning through storage avoids both: call `storeApiKey()` once from a
+temporary line, remove the line, rebuild. Storage survives the new build, so the
+key ends up on the device and in no commit.
 
-Set `REMOTE_BASE_URL` and `REMOTE_MODEL` to aim at something else. Aiming at a
-gateway you own is the intended end state — the device then carries a token you
-issue and can revoke per device, the provider key stays server-side, and
-changing which model handles which question becomes a deploy instead of a
-Studio republish plus a device update.
+Set `REMOTE_BASE_URL` and `REMOTE_MODEL` to aim at something else — another
+OpenAI-compatible provider, a different Groq model, or a server of your own.
+Calling the provider directly is what this sample does and is a real choice, not
+a placeholder: one hop, nothing to operate. Its cost is that the key lives on the
+device and the prompt ships in the bundle, so changing either means a new build.
+A server in front trades that for having a server to run.
 
 **What it changes.** The remote model is asked for two texts rather than one:
 a spoken sentence and a short display fragment. They are different jobs — the
