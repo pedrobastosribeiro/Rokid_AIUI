@@ -111,8 +111,62 @@ test('the voice loop starts listening on load and guards unload', () => {
   assert.match(inkSource, /this\.pageActive = false/);
 });
 
+test('the voice loop speaks the greeting on load, not only on replay', () => {
+  // The greeting used to reach the speaker only if the wearer pressed Ouvir
+  // before the first model reply. Putting the glasses on should produce a
+  // voice, so onLoad speaks it — and it must stay on the branch that has no
+  // query.prompt, or a launch with a question gets a hello in front of it.
+  // startTalk() before speakReply(), not after: startTalk() clears lastError,
+  // so greeting first would wipe the TTS diagnostic speakReply() just wrote.
+  assert.match(inkSource, /this\.startTalk\(\);\s*this\.speakReply\(COPY\.greeting\);/);
+  const branch = inkSource.match(
+    /await this\.answerPrompt\(initialPrompt\);([\s\S]*?)this\.speakReply\(COPY\.greeting\);/,
+  );
+  assert.ok(branch, 'expected answerPrompt to appear before the spoken greeting in onLoad');
+  assert.match(branch[1], /return;/, 'the query.prompt branch must return before the greeting');
+});
+
 test('the voice loop routes ASR failures through the localized map', () => {
   assert.match(inkSource, /getAsrFailureMessage\(/);
+});
+
+test('the system prompt starts neutral and mirrors the speaker, without caricature', () => {
+  // Word choice is the only register lever available: utterance.voice and lang
+  // are not effective on the glasses and getVoices() is not exposed, so a
+  // future edit that flattens this prompt silently removes the only adaptation
+  // the wearer would ever hear.
+  const prompt = getSystemPrompt();
+  assert.match(prompt, /Comece em português neutro/);
+  assert.match(prompt, /jeito mineiro/);
+  assert.match(prompt, /paulista/);
+  // Three guards that keep mirroring from becoming mimicry.
+  assert.match(prompt, /sem sinal claro, siga no neutro/);
+  assert.match(prompt, /Nunca imite sotaque de novela/);
+  assert.match(prompt, /nunca comente o sotaque/);
+  // The register must not cost the constraints it sits between.
+  assert.match(prompt, /português brasileiro \(pt-BR\)/);
+  assert.match(prompt, /Seja curto/);
+});
+
+test('the manifest carries the same register rules as the runtime prompt', () => {
+  // Two prompt sources reach the model: this page's initialPrompts and the
+  // packed AGENTS.md, which the Open Agent Format calls the most important
+  // runtime context. They must not disagree about how the agent talks.
+  const manifest = readFileSync(
+    new URL('../samples/pt-br/AGENTS.md', import.meta.url),
+    'utf8',
+  );
+  for (const rule of [/Comece em português neutro/, /jeito mineiro/, /paulista/, /nunca comente o sotaque/]) {
+    assert.match(manifest, rule);
+    assert.match(getSystemPrompt(), rule);
+  }
+});
+
+test('the greeting stays neutral, because nothing has been heard yet', () => {
+  // It is spoken before the wearer says anything, so there is no register to
+  // mirror -- and it doubles as the Studio listing's opening monologue.
+  assert.doesNotMatch(COPY.greeting, /uai|sô\b|mano|trem\b/i);
+  assert.match(COPY.greeting, /português/);
 });
 
 test('the voice loop pins ASR and spoken TTS to Portuguese', () => {
