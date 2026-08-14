@@ -211,7 +211,28 @@ export default {
       await this.answerPrompt(initialPrompt);
       return;
     }
+
+    // The greeting has always been on screen and never in the air: onLoad only
+    // seeded it as `lastReply`, so the only way to hear it was pressing Ouvir
+    // before the first model reply. Speaking it is what makes putting the
+    // glasses on produce a voice instead of silent text. Not spoken on the
+    // query.prompt branch above -- someone who launched with a question wants
+    // the answer, not a hello in front of it.
+    //
+    // It overlaps the microphone, and that is not fixable here: utterance
+    // lifecycle events are not exposed, so there is no "speech ended" to wait
+    // for, and `cancel()` is not exposed either. Whether the host suppresses
+    // its own echo is unknown and untested on device. If the greeting comes
+    // back transcribed as user speech, the fix is to drop startTalk() here and
+    // let the temple button open the first turn.
+    // Listening starts first, and the order is load-bearing rather than
+    // stylistic: startTalk() clears `lastError` as part of entering the
+    // listening state, so greeting the wearer before it would let it wipe the
+    // TTS diagnostic speakReply() had just written -- silence with no
+    // explanation, which is the worst of both. Speaking second costs nothing;
+    // the two calls are synchronous and back to back.
     this.startTalk();
+    this.speakReply(COPY.greeting);
   },
 
   onUnload() {
