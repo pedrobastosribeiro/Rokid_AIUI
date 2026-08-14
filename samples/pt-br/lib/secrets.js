@@ -9,7 +9,7 @@
 // preferred over this constant -- seeded by scanning a QR code with the camera,
 // the way `samples/scanner` already reads one through `BarcodeDetector`. Then
 // the key never enters the repository or the bundle at all.
-export const REMOTE_API_KEY = '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';
+export const REMOTE_API_KEY = '';
 
 // Override the provider without editing code elsewhere. Leave the base URL empty
 // to use the default in `remote-model.js`. Pointing these at a gateway you own
