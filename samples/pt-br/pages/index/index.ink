@@ -225,8 +225,14 @@ export default {
     // its own echo is unknown and untested on device. If the greeting comes
     // back transcribed as user speech, the fix is to drop startTalk() here and
     // let the temple button open the first turn.
-    this.speakReply(COPY.greeting);
+    // Listening starts first, and the order is load-bearing rather than
+    // stylistic: startTalk() clears `lastError` as part of entering the
+    // listening state, so greeting the wearer before it would let it wipe the
+    // TTS diagnostic speakReply() had just written -- silence with no
+    // explanation, which is the worst of both. Speaking second costs nothing;
+    // the two calls are synchronous and back to back.
     this.startTalk();
+    this.speakReply(COPY.greeting);
   },
 
   onUnload() {

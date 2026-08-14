@@ -116,7 +116,9 @@ test('the voice loop speaks the greeting on load, not only on replay', () => {
   // before the first model reply. Putting the glasses on should produce a
   // voice, so onLoad speaks it — and it must stay on the branch that has no
   // query.prompt, or a launch with a question gets a hello in front of it.
-  assert.match(inkSource, /this\.speakReply\(COPY\.greeting\);\s*this\.startTalk\(\);/);
+  // startTalk() before speakReply(), not after: startTalk() clears lastError,
+  // so greeting first would wipe the TTS diagnostic speakReply() just wrote.
+  assert.match(inkSource, /this\.startTalk\(\);\s*this\.speakReply\(COPY\.greeting\);/);
   const branch = inkSource.match(
     /await this\.answerPrompt\(initialPrompt\);([\s\S]*?)this\.speakReply\(COPY\.greeting\);/,
   );
@@ -144,6 +146,20 @@ test('the system prompt starts neutral and mirrors the speaker, without caricatu
   // The register must not cost the constraints it sits between.
   assert.match(prompt, /português brasileiro \(pt-BR\)/);
   assert.match(prompt, /Seja curto/);
+});
+
+test('the manifest carries the same register rules as the runtime prompt', () => {
+  // Two prompt sources reach the model: this page's initialPrompts and the
+  // packed AGENTS.md, which the Open Agent Format calls the most important
+  // runtime context. They must not disagree about how the agent talks.
+  const manifest = readFileSync(
+    new URL('../samples/pt-br/AGENTS.md', import.meta.url),
+    'utf8',
+  );
+  for (const rule of [/Comece em português neutro/, /jeito mineiro/, /paulista/, /nunca comente o sotaque/]) {
+    assert.match(manifest, rule);
+    assert.match(getSystemPrompt(), rule);
+  }
 });
 
 test('the greeting stays neutral, because nothing has been heard yet', () => {
