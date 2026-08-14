@@ -25,7 +25,24 @@ Publishing `create-aiui-agent` to npm gates on the full `pr-checks` workflow (va
 
 Two different jobs share the same filename. Do not collapse them.
 
-- **`samples/*/AGENTS.md` and `packages/create-aiui-agent/template/AGENTS.md`** are agent manifests for samples and the scaffold, not repository guidance. [The Open Agent Format spec](documentation/1-framework/open-agent-format/agents.md) defines `# Agent: <name>` / `## System Prompts` / `## Capabilities` / `## Configuration` / `## Dependencies` — that is the target, not a description of what is checked in. Only `samples/pt-br` currently follows it; the rest predate the spec (`# Agent Manifest` + Identity, a title plus Getting Started, or a title with no sections). Do not mass-rewrite them to the spec as a side effect of an unrelated change, and do not put repository prose in those files.
+- **`samples/*/AGENTS.md` and `packages/create-aiui-agent/template/AGENTS.md`** are agent manifests for samples and the scaffold, not repository guidance. Write the **Identity form** — `# Agent Manifest`, then `## Identity` with a `- **Name**:` line, then `## Capabilities`:
+
+  ```markdown
+  # Agent Manifest
+
+  ## Identity
+  - **Name**: Óculos Rokid
+  - **Version**: 0.2.0
+
+  ## Capabilities
+  - **Permissions**:
+    - microphone
+    - network
+  ```
+
+  **Not the shape the spec describes.** [The Open Agent Format spec](documentation/1-framework/open-agent-format/agents.md) documents `# Agent: <name>` / `## System Prompts` / `## Capabilities` / `## Configuration` / `## Dependencies`, and AIUI Studio rejects it: it validates the packed `AGENTS.md` for the Identity form, and a `# Agent: …` title with no `Name` field is not enough — see [`samples/pt-br/CRAFT.md`](samples/pt-br/CRAFT.md). `samples/pt-br` was the last file following the spec and was moved off it in `47dea96` for exactly that reason, so today **no manifest in this repo follows the spec, and none should**. Treat the spec page as describing a format the platform does not yet accept; a manifest "corrected" toward it stops uploading.
+
+  Three carry the complete form: `bluetooth`, `capabilities`, `pt-br` — copy one of those. `scanner` and `tts` have `## Identity` and a `Name` but sit under a title heading instead of `# Agent Manifest`; only `pt-br` has actually been through a Studio upload, so treat those two as untested rather than as a second valid shape. The remaining four — the scaffold template, `cut-card`, `games`, `meal-card` — have no `Name` field and would not validate as they stand. Fix one when you are already working in it, not as a sweep, and never put repository prose in any of them.
 - **The root `AGENTS.md`** is Cursor Cloud / cross-tool **agent operating guidance**: what a Cloud VM can and cannot run (the scaffolding CLI, `npm test` vs `pack`'s network need, the fact that there is nothing to install at the root). Cursor Cloud and other agents load that filename automatically; the filename *is* the mechanism. Do not rename it to `DEVELOPMENT.md`, do not treat it as a misplaced manifest, and do not fold its content into this file.
 
 Repository authoring conventions (this document) go here. Cloud VM operating guidance goes in the root `AGENTS.md`.
