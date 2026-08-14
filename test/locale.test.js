@@ -145,7 +145,21 @@ test('the system prompt starts neutral and mirrors the speaker, without caricatu
   assert.match(prompt, /nunca comente o sotaque/);
   // The register must not cost the constraints it sits between.
   assert.match(prompt, /português brasileiro \(pt-BR\)/);
-  assert.match(prompt, /Seja curto/);
+  assert.match(prompt, /no máximo duas frases/);
+});
+
+test('the length budget is countable, not an adjective or a pixel size', () => {
+  // "Seja curto" gives the model nothing to measure against, and the pixel size
+  // it used to carry ("um HUD de 480x352") is worse -- a true fact the model
+  // cannot convert into a sentence count. What replaced it has to stay
+  // countable, and has to keep banning the ritual that actually produces
+  // length: preamble, restating the question, and the offer to elaborate.
+  const prompt = getSystemPrompt();
+  assert.match(prompt, /no máximo duas frases/);
+  assert.match(prompt, /sem preâmbulo/);
+  assert.match(prompt, /sem repetir a pergunta/);
+  assert.match(prompt, /sem se oferecer para detalhar/);
+  assert.doesNotMatch(prompt, /480/);
 });
 
 test('the manifest carries the same register rules as the runtime prompt', () => {
@@ -156,7 +170,16 @@ test('the manifest carries the same register rules as the runtime prompt', () =>
     new URL('../samples/pt-br/AGENTS.md', import.meta.url),
     'utf8',
   );
-  for (const rule of [/Comece em português neutro/, /jeito mineiro/, /paulista/, /nunca comente o sotaque/]) {
+  for (const rule of [
+    /Comece em português neutro/,
+    /jeito mineiro/,
+    /paulista/,
+    /nunca comente o sotaque/,
+    // Length is a register decision too: a manifest that still asked for long
+    // answers would pull against the prompt on every single turn.
+    /no máximo duas frases/,
+    /sem preâmbulo/,
+  ]) {
     assert.match(manifest, rule);
     assert.match(getSystemPrompt(), rule);
   }

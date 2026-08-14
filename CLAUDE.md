@@ -6,7 +6,7 @@ Everything below is repository-specific and cost someone time to discover. Gener
 
 ## Checks
 
-`npm test` runs `node scripts/ci/validate.mjs` — seven checks: `json`, `syntax`, `samples`, `whitespace`, `tests`, `pack`, `links`. Pass names for a subset:
+`npm test` runs `node scripts/ci/validate.mjs` — eight checks: `json`, `syntax`, `samples`, `secrets`, `whitespace`, `tests`, `pack`, `links`. Pass names for a subset:
 
 ```bash
 npm test                              # every validate.mjs check
@@ -18,6 +18,8 @@ node scripts/ci/validate.mjs links    # one check
 That is not the whole CI gate. `.github/workflows/pr-checks.yml` has three jobs: `validate` (the static checks), `pack` (the pack check), and `scaffold`, which `npm pack`s `packages/create-aiui-agent`, installs the tarball, drives the installed binary, and asserts the generated files. `validate.mjs` does none of that, so a regression in `files`, `.npmignore`, or bin packaging passes `npm test` and still fails CI and the publish workflow.
 
 The validator is deliberately dependency-free — the repo ships no tooling lockfile. Keep it that way; a new check should use Node built-ins and `git ls-files`.
+
+`secrets` exists because a sample that calls a paid or rate-limited API needs a real key on the device to be testable at all, and the shortest path to that is pasting one into the source — from where it travels into the packed `.aix`, up to Studio, and into this history, which deleting the line later does not undo. Two samples take opposite approaches and both are fine: `samples/tts` injects `getAuthorization` and refuses to play without it, while `samples/pt-br` keeps a `lib/secrets.js` of empty placeholders meant to be filled in locally. The check is what makes "emptied before commit" enforceable rather than remembered. **Note it only sees tracked files** — `git ls-files` — so a key in a file you have not `git add`ed yet passes, and then fails the moment you stage it.
 
 Publishing `create-aiui-agent` to npm gates on the full `pr-checks` workflow (validate + pack + scaffold), so a red run blocks the release. The publish is triggered by bumping `version` in `packages/create-aiui-agent/package.json` on `main`; it skips itself when that version is already on the registry.
 
@@ -54,6 +56,8 @@ A page is either one `.ink` single-file component or the multi-file form (`index
 **Only use confirmed WXSS properties.** [`skills/aiui-dev/wxss.md`](skills/aiui-dev/wxss.md) lists what the renderer actually supports. `overflow` and `max-height` are *not* on it — only `position` appears under "Positioning And Overflow" — so a layout that depends on them may not hold. Bound variable-length text in JavaScript and treat CSS as the backstop.
 
 **The canvas is 480 × 352 and does not scroll.** Fixed chrome eats roughly 193px of the 328px inner height, so two stacked panels get about two lines of 14px text each. Anything that can grow — a model reply, a transcript, a host error string — needs an explicit bound, or it pushes the action row off the display where no one can reach it.
+
+**Bounding the display does not bound the speech.** These are two channels with two costs, and clamping only the visible one is the worst split — information is lost on screen and the wearer's time is spent anyway. `speechSynthesis.cancel()` is not exposed, so an over-long utterance is the one failure a wearer cannot escape; they wait it out. `samples/pt-br/lib/reply-format.js` bounds speech separately and cuts on a sentence terminator rather than a character count, because audio has no equivalent of the HUD's trailing `…` — a clause that stops mid-breath just sounds like the device broke. The same file also holds the length rules for the prompt, and they are worth reading before writing new ones: a countable budget ("no máximo duas frases") plus explicit bans on preamble, restating the question, and offering to elaborate. `Seja curto` gives the model nothing to measure, and a pixel size gives it a fact it cannot convert into a sentence count.
 
 **Layout defaults to a row.** Ink lays out on Taffy, so every stacking container needs `flex-direction: column` explicitly. Give non-shrinking chrome `flex-shrink: 0` and let content panels absorb the pressure.
 

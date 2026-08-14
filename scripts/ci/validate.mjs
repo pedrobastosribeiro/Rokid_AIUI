@@ -288,6 +288,53 @@ const checks = {
     );
   },
 
+  // Provider keys must not reach a commit. A sample that talks to a paid or
+  // rate-limited API needs a key on the device to be testable, and the path of
+  // least resistance is pasting one into the source -- where it then travels
+  // into the packed `.aix`, up to Studio, and into this history, which no later
+  // deletion undoes. `samples/tts` sidesteps this by refusing to run without an
+  // injected `getAuthorization`; `samples/pt-br` keeps a `secrets.js` whose
+  // placeholders are meant to be filled in locally and emptied before commit.
+  // This is what makes "emptied before commit" a rule rather than a hope.
+  secrets(fail, note) {
+    let placeholders = 0;
+
+    for (const file of tracked('samples/*/lib/secrets.js')) {
+      const source = read(file);
+      // Matches the committed shape: `export const NAME = '';`. A filled-in
+      // value has something between the quotes.
+      const assignments = source.matchAll(
+        /export\s+const\s+([A-Z0-9_]+)\s*=\s*(['"])(.*?)\2/g,
+      );
+      for (const [, name, , value] of assignments) {
+        placeholders += 1;
+        if (value.trim()) {
+          fail(`${file}: ${name} is not empty -- clear it before committing`);
+        }
+      }
+    }
+
+    // A key can land anywhere, not only in the file set aside for it. These two
+    // shapes are specific enough not to fire on prose: both carry a fixed prefix
+    // and a long opaque tail.
+    const KEY_SHAPES = [
+      [/\bgsk_[A-Za-z0-9]{40,}\b/, 'a Groq key'],
+      [/\bsk-[A-Za-z0-9-]{40,}\b/, 'an OpenAI-style key'],
+    ];
+    const scanned = tracked(
+      '*.js', '*.mjs', '*.cjs', '*.ts', '*.ink', '*.json', '*.md', '*.yml', '*.wxml',
+    ).filter((file) => !isVendored(file));
+
+    for (const file of scanned) {
+      const source = read(file);
+      for (const [shape, label] of KEY_SHAPES) {
+        if (shape.test(source)) fail(`${file}: looks like it contains ${label}`);
+      }
+    }
+
+    note(`checked ${placeholders} placeholders and scanned ${scanned.length} files for keys`);
+  },
+
   // No trailing whitespace in source. Markdown is excluded on purpose: two
   // trailing spaces are a hard line break there, so stripping them changes
   // rendering.
