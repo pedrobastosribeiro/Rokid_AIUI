@@ -75,10 +75,59 @@ samples/pt-br/
   app.json
   app.js
   lib/locale.js          # locale helper, copy, LLM prompt
+  lib/reply-format.js    # length budget, speech bound, two-channel reply
+  lib/remote-model.js    # optional OpenAI-compatible model over wx.request
+  lib/secrets.js         # local-only key placeholders (must stay empty in git)
   pages/index/index.ink  # HUD voice loop
   README.md
   CRAFT.md               # Craft GitHub import URL (do not use main/samples/pt-br)
 ```
+
+## Optional: a remote model
+
+The host model answers by default and needs no setup. Pointing the page at a
+stronger model is opt-in, and with no key configured nothing below changes how
+the sample behaves.
+
+`lib/remote-model.js` speaks the OpenAI chat-completions shape, so it works with
+any provider or gateway that does. It defaults to Groq, whose free tier costs
+nothing and is fast enough that the extra round trip is not felt.
+
+**Where the key goes.** Two places are read, in this order:
+
+1. **Device storage** — `storeApiKey(value)` writes to `wx.setStorageSync` under
+   `ptbr.remoteModel.apiKey`. Local to the device and isolated per agent
+   ([storage](../../documentation/3-api/storage-api.en-US.md)), so the key never
+   enters the repository or the packed `.aix`. This is the path meant to last.
+2. **`lib/secrets.js`** — paste a key into `REMOTE_API_KEY` to test, then clear
+   it. `npm test` fails the `secrets` check while it is non-empty.
+
+Storage wins when both are set, so a properly provisioned device never silently
+falls back to a key that shipped in the bundle.
+
+Use a token you can revoke and do not reuse it elsewhere. A key in `secrets.js`
+travels inside the `.aix` to Studio, which means it is published, and rotating
+it means shipping a new build — fine for a bench test, wrong for anything else.
+The path worth building instead is a QR scan: `samples/scanner` already decodes
+one through `BarcodeDetector`, so the token can be shown on a phone, read once,
+and stored, without ever being committed.
+
+Set `REMOTE_BASE_URL` and `REMOTE_MODEL` to aim at something else. Aiming at a
+gateway you own is the intended end state — the device then carries a token you
+issue and can revoke per device, the provider key stays server-side, and
+changing which model handles which question becomes a deploy instead of a
+Studio republish plus a device update.
+
+**What it changes.** The remote model is asked for two texts rather than one:
+a spoken sentence and a short display fragment. They are different jobs — the
+ear wants a sentence, the ~100-character panel wants a headline — and one string
+serving both is what produces a reply that is too long to read and too clipped
+to sound natural. The host model has no response-format option, so on that path
+one string still serves both.
+
+If the remote call fails, the host model answers instead and the reason is shown
+on the error line. A 429 is ordinary on a free tier, and a wearer who asked a
+question should get an answer rather than an error where the answer was.
 
 ## Next deployments
 
