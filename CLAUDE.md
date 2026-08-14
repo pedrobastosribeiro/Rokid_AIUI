@@ -80,3 +80,11 @@ npx --yes @yodaos-pkg/aix-cli@0.8.2 pack ./samples/<name> -o out.aix --engine '^
 `--engine` is real despite being absent from older revisions of the CLI reference; `aix --help` is the authority on flags, not the docs page.
 
 Add a `.aixignore` to any sample carrying a README so documentation stays out of the device bundle.
+
+## The `pt-br` branch is generated, not written
+
+Craft resolves everything after `/tree/` as one git ref, so `/tree/main/samples/pt-br` looks up a branch named `main/samples/pt-br` and fails. `sync-craft-pt-br.yml` therefore subtree-splits `samples/pt-br` onto a branch named `pt-br`, whose root is the sample, and that is the URL the READMEs and quickstarts document. Never commit to it — the next push to `main` force-pushes over whatever is there.
+
+**It runs on every push to `main`, with no `paths:` filter, and that is deliberate.** Republishing an identical tree is a no-op, so running always is what makes the branch repair itself: a run that fails, gets cancelled, or is force-pushed over by hand is corrected by the next commit. Add a filter back and repair stops being automatic — it then takes another edit to the sample, or someone noticing and dispatching the workflow by hand, which is how a stale import URL survives unnoticed.
+
+Verification belongs in that workflow, not in `pr-checks`. It is the job holding `contents: write`, so whoever sees it go red can re-run it — a drift check in the PR checks would redden unrelated pull requests, and every fork PR, over a state their author cannot fix, and would block the `create-aiui-agent` release through `publish-create-aiui-agent.yml`'s `needs: checks`.
