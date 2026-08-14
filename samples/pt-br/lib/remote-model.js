@@ -127,7 +127,25 @@ export class RemoteModel {
   }
 
   // Resolves to the `{ fala, tela, structured }` shape from reply-format.
-  complete({ system, prompt, screenLimit }) {
+  //
+  // `response_format` is the one option here that not every OpenAI-compatible
+  // endpoint implements, and an endpoint that does not usually rejects the whole
+  // request rather than ignoring the field. Since the point of this client is
+  // that you can aim it somewhere else, a 400 gets one retry without the option:
+  // `parseTwoChannelReply` already degrades prose into a usable reply, so the
+  // second attempt succeeds where the first could only fail confusingly.
+  async complete({ system, prompt, screenLimit }) {
+    try {
+      return await this.send({ system, prompt, screenLimit, json: true });
+    } catch (error) {
+      if (!isUnsupportedFormat(error)) {
+        throw error;
+      }
+      return this.send({ system, prompt, screenLimit, json: false });
+    }
+  }
+
+  send({ system, prompt, screenLimit, json }) {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return Promise.reject(new Error('Modelo remoto sem chave configurada.'));
@@ -140,7 +158,7 @@ export class RemoteModel {
       // makes repeated questions produce word-for-word identical replies, which
       // sounds broken when spoken aloud.
       temperature: 0.3,
-      response_format: { type: 'json_object' },
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
       messages: [
         { role: 'system', content: `${system} ${getJsonReplyInstruction(screenLimit)}` },
         { role: 'user', content: prompt },
@@ -174,7 +192,12 @@ export class RemoteModel {
         success: (res) => {
           const status = res && res.statusCode;
           if (typeof status === 'number' && status >= 400) {
-            finish(reject, new Error(describeHttpFailure(status, res.data)));
+            const failure = new Error(describeHttpFailure(status, res.data));
+            // Carried so the retry above can tell a rejected option from a
+            // rejected key. Without it every 400 would look the same.
+            failure.statusCode = status;
+            failure.body = res.data;
+            finish(reject, failure);
             return;
           }
           // `dataType` defaults to `json`, so `data` is usually parsed already;
@@ -207,6 +230,22 @@ export class RemoteModel {
       }, this.timeoutMs);
     });
   }
+}
+
+// Only a 400 is worth retrying without the option, and only when the endpoint
+// says the option is what it disliked. A 400 about the model name or the message
+// shape would fail identically on the second attempt, so retrying it would just
+// double the wait before the same error reaches the wearer.
+function isUnsupportedFormat(error) {
+  if (!error || error.statusCode !== 400) {
+    return false;
+  }
+  const body = error.body;
+  const detail =
+    typeof body === 'string'
+      ? body
+      : (body && body.error && body.error.message) || error.message || '';
+  return /response_format|json_object|json mode/i.test(detail);
 }
 
 function safeJsonParse(text) {
