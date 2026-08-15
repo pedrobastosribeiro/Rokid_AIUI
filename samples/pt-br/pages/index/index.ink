@@ -158,6 +158,12 @@ export default {
     ttsAvailable: false,
     isBusy: false,
     liveTranscript: '',
+    // Which path produced the reply on screen: 'GROQ' or 'HOST'. Empty before
+    // the first turn. Without this the fallback is invisible -- a key that was
+    // never picked up looks exactly like a working host-only build, which is
+    // the difference between "the remote model is off" and "I configured it and
+    // something is wrong", and those need opposite next steps.
+    replySource: '',
     lastReply: COPY.greeting,
     lastError: '',
     speakButton: COPY.speakButton,
@@ -492,7 +498,7 @@ export default {
           screenLimit: MAX_HUD_CHARS,
         });
         if (fala) {
-          return { fala, tela };
+          return { fala, tela, source: 'GROQ' };
         }
         // An empty reply is a failure that did not throw. Falling through is
         // better than speaking nothing.
@@ -510,7 +516,7 @@ export default {
   async hostReply(prompt) {
     const session = await this.ensureSession();
     const reply = normalizeText(await session.prompt(prompt));
-    return { fala: reply, tela: reply };
+    return { fala: reply, tela: reply, source: 'HOST' };
   },
 
   async answerPrompt(text, turnId) {
@@ -536,13 +542,14 @@ export default {
     });
 
     try {
-      const { fala, tela, remoteError } = await this.requestReply(prompt);
+      const { fala, tela, source, remoteError } = await this.requestReply(prompt);
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
       }
       const reply = fala;
       this.lastReplyText = reply;
       this.setData({
+        replySource: source || '',
         lastReply: clampForHud(tela) || '(sem texto)',
         // A remote failure that fell back is not a dead end -- there is a reply
         // on screen -- but hiding it would make a misconfigured key or an
@@ -635,7 +642,7 @@ export default {
 
     <view class="meta">
       <text class="meta-line">Host: {{hostLanguage}} · {{hostIsPortuguese ? 'compatível com pt' : 'não é pt'}}</text>
-      <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}}</text>
+      <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}} · REMOTO {{remoteAvailable}}</text>
     </view>
 
     <view class="status-row">
@@ -648,7 +655,7 @@ export default {
     </view>
 
     <view class="panel">
-      <text class="label">ASSISTENTE</text>
+      <text class="label">ASSISTENTE{{replySource ? ' · ' + replySource : ''}}</text>
       <text class="body">{{lastReply}}</text>
     </view>
 
