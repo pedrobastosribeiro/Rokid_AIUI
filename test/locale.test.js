@@ -79,7 +79,7 @@ test('keeps HUD copy in Portuguese', () => {
     assert.equal(typeof value, 'string', key);
     assert.ok(value.trim().length > 0, key);
   }
-  assert.match(COPY.title, /Óculos Rokid/);
+  assert.match(COPY.title, /Axiom/);
   assert.match(COPY.greeting, /português/);
   assert.match(COPY.speakHint, /português brasileiro/);
 });
@@ -384,4 +384,24 @@ test('reopens discovery when the registry changes', async () => {
     const voicesNow = await ensureVoicesReady(60);
     assert.equal(pickPortugueseVoice(voicesNow).name, 'Luciana');
   });
+});
+
+test('the agent has a name of its own, distinct from the hardware', () => {
+  // "Óculos Rokid" was the agent name and the product name at once, and the
+  // collision broke invocation: asked for by name, the platform answered with
+  // glasses specifications instead of routing here, and pt-BR ASR transcribed
+  // it as "Rocket" about as often as "Rokid". A name the hardware does not
+  // already own is what makes the agent addressable.
+  assert.match(COPY.title, /Axiom/);
+  assert.match(getSystemPrompt(), /Seu nome é Axiom/);
+  assert.doesNotMatch(COPY.title, /Rokid/);
+
+  const manifest = readFileSync(
+    new URL('../samples/pt-br/AGENTS.md', import.meta.url),
+    'utf8',
+  );
+  // The Identity Name is the field AIUI Studio validates on upload, so it is
+  // the one that has to carry the new name, not just the HUD copy.
+  assert.match(manifest, /- \*\*Name\*\*: Axiom/);
+  assert.match(manifest, /Seu nome é Axiom/);
 });

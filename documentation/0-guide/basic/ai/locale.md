@@ -81,7 +81,7 @@ aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 https://github.com/pedrobastosribeiro/Rokid_AIUI/tree/pt-br
 ```
 
-该分支的仓库根目录已包含 `app.json`。然后在 Craft 中打包，上传到 [AIUI Studio Global](https://aiui-global.rokid.com/) 中名为 **Óculos Rokid** 的 AIUI Agent，并在眼镜上执行 **Settings → Developer → AIUI → Update Glasses Resource Package**。
+该分支的仓库根目录已包含 `app.json`。然后在 Craft 中打包，上传到 [AIUI Studio Global](https://aiui-global.rokid.com/) 中名为 **Axiom** 的 AIUI Agent，并在眼镜上执行 **Settings → Developer → AIUI → Update Glasses Resource Package**。
 
 ## 继续阅读
 

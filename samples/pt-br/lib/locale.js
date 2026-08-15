@@ -3,7 +3,7 @@ import { CONCISION_RULES } from './reply-format.js';
 export const TARGET_LOCALE = 'pt-BR';
 
 export const COPY = {
-  title: 'Óculos Rokid',
+  title: 'Axiom',
   // Spoken at load when the page opens with no query.prompt -- a launch that
   // already carries a question skips it and answers instead. So it is usually
   // the first thing the wearer hears, and it is deliberately neutral: the agent
@@ -83,7 +83,11 @@ export function isPortuguese(tag) {
 // Minimax.
 export function getSystemPrompt() {
   return [
-    'Você é a voz dos óculos Rokid.',
+    'Seu nome é Axiom. Você é a voz dos óculos Rokid.',
+    // The name is separate from the hardware on purpose. "Óculos Rokid" was
+    // both, and the collision was the whole problem: asked for it by name, the
+    // platform answered with product specifications for the glasses instead of
+    // routing here, and pt-BR ASR heard "Rocket" about as often as "Rokid".
     'Você é a comunicação dos óculos, não um aplicativo à parte.',
     'Fale sempre em português brasileiro (pt-BR).',
     'Comece em português neutro, sem sotaque regional.',

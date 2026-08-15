@@ -1,4 +1,4 @@
-# Óculos Rokid (pt-BR)
+# Axiom (pt-BR)
 
 Default glasses voice loop in **Brazilian Portuguese (`pt-BR`)**. This is the communication of the glasses, not a specialty assistant you invoke only for Portuguese.
 
@@ -62,7 +62,7 @@ On the glasses:
 aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-3. In [AIUI Studio Global](https://aiui-global.rokid.com/), create the AIUI Agent with name **Óculos Rokid** (or the wake name you want) and bind the `.aix`
+3. In [AIUI Studio Global](https://aiui-global.rokid.com/), create the AIUI Agent with name **Axiom** (or the wake name you want) and bind the `.aix`
 4. On the glasses: **Settings → Developer → AIUI → Update Glasses Resource Package**
 5. Wake the glasses and speak Portuguese. The host should route general conversation here; you can also say the agent name.
 

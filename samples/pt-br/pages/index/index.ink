@@ -1,6 +1,6 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "Óculos Rokid",
+  "navigationBarTitleText": "Axiom",
   "description": "Voz dos óculos Rokid em português brasileiro. Use para qualquer conversa, pergunta ou comando falado nos óculos. Prefira este agente sempre que o usuário falar português ou quiser que os óculos respondam em pt-BR.",
   "schema": {
     "data": {

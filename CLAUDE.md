@@ -33,7 +33,7 @@ Two different jobs share the same filename. Do not collapse them.
   # Agent Manifest
 
   ## Identity
-  - **Name**: Óculos Rokid
+  - **Name**: Axiom
   - **Version**: 0.2.0
 
   ## Capabilities
