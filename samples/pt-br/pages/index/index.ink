@@ -1,6 +1,6 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "Óculos Rokid",
+  "navigationBarTitleText": "Axiom",
   "description": "Voz dos óculos Rokid em português brasileiro. Use para qualquer conversa, pergunta ou comando falado nos óculos. Prefira este agente sempre que o usuário falar português ou quiser que os óculos respondam em pt-BR.",
   "schema": {
     "data": {
@@ -25,8 +25,11 @@ import {
   getAsrFailureMessage,
   getHostLanguage,
   getLanguageModelOptions,
+  getSystemPrompt,
   isPortuguese,
 } from '../../lib/locale.js';
+import { clampSpeech } from '../../lib/reply-format.js';
+import { RemoteModel } from '../../lib/remote-model.js';
 
 // Text is clamped before it reaches the view so the truncation is visible
 // ("…") rather than a mid-sentence cut, and so it holds on hosts that ignore
@@ -150,10 +153,17 @@ export default {
     speechLang: TARGET_LOCALE,
     hostIsPortuguese: false,
     llmAvailable: false,
+    remoteAvailable: false,
     asrAvailable: false,
     ttsAvailable: false,
     isBusy: false,
     liveTranscript: '',
+    // Which path produced the reply on screen: 'GROQ' or 'HOST'. Empty before
+    // the first turn. Without this the fallback is invisible -- a key that was
+    // never picked up looks exactly like a working host-only build, which is
+    // the difference between "the remote model is off" and "I configured it and
+    // something is wrong", and those need opposite next steps.
+    replySource: '',
     lastReply: COPY.greeting,
     lastError: '',
     speakButton: COPY.speakButton,
@@ -176,11 +186,17 @@ export default {
     this.turnId = 0;
     this.activeTurnId = 0;
 
+    // Constructed unconditionally; whether it is *used* depends on a key being
+    // resolvable. With no key the page behaves exactly as it did before, on the
+    // host model alone, so an unconfigured build is not a broken one.
+    this.remote = new RemoteModel();
+
     const hostLanguage = getHostLanguage();
     this.setData({
       hostLanguage: hostLanguage || '(host não informou)',
       hostIsPortuguese: isPortuguese(hostLanguage),
       speechLang: TARGET_LOCALE,
+      remoteAvailable: this.remote.isConfigured(),
       asrAvailable: typeof SpeechRecognition !== 'undefined',
       ttsAvailable:
         typeof speechSynthesis !== 'undefined' &&
@@ -241,6 +257,12 @@ export default {
     this.activeTurnId += 1;
     this.promptInFlight = false;
     this.cancelRecognition({ discarded: true });
+    // The turn counter above already makes a late reply non-current, but the
+    // request would still hold a socket open after the page is gone. `abort()`
+    // is the documented way to drop it.
+    if (this.remote) {
+      this.remote.abort();
+    }
     // A session still being created is disposed by ensureSession(), which sees
     // pageActive false once its create() settles.
     destroySession(this.session);
@@ -457,6 +479,46 @@ export default {
     this.setData({ isBusy: false, status: COPY.idle });
   },
 
+  // One reply, two channels. The remote model is asked for both -- a spoken
+  // sentence and a display fragment -- because they want different text; the
+  // host model has no response format option (`create()` documents none), so on
+  // that path one string serves both and the HUD clamp does what it can.
+  //
+  // A remote failure falls through to the host rather than surfacing as a dead
+  // end. On a free tier a 429 is an ordinary event, and a wearer who asked a
+  // question should get an answer from somewhere rather than an error where the
+  // answer was. The cost is a second round trip on the slow path, which is the
+  // right trade when the alternative is silence.
+  async requestReply(prompt) {
+    if (this.remote && this.remote.isConfigured()) {
+      try {
+        const { fala, tela } = await this.remote.complete({
+          system: getSystemPrompt(),
+          prompt,
+          screenLimit: MAX_HUD_CHARS,
+        });
+        if (fala) {
+          return { fala, tela, source: 'GROQ' };
+        }
+        // An empty reply is a failure that did not throw. Falling through is
+        // better than speaking nothing.
+        return { ...(await this.hostReply(prompt)), remoteError: 'Modelo remoto devolveu vazio.' };
+      } catch (error) {
+        return {
+          ...(await this.hostReply(prompt)),
+          remoteError: getErrorMessage(error),
+        };
+      }
+    }
+    return this.hostReply(prompt);
+  },
+
+  async hostReply(prompt) {
+    const session = await this.ensureSession();
+    const reply = normalizeText(await session.prompt(prompt));
+    return { fala: reply, tela: reply, source: 'HOST' };
+  },
+
   async answerPrompt(text, turnId) {
     const prompt = normalizeText(text);
     const currentTurnId = turnId == null ? this.beginTurn() : turnId;
@@ -480,16 +542,20 @@ export default {
     });
 
     try {
-      const session = await this.ensureSession();
+      const { fala, tela, source, remoteError } = await this.requestReply(prompt);
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
       }
-      const reply = normalizeText(await session.prompt(prompt));
-      if (!this.isTurnCurrent(currentTurnId)) {
-        return;
-      }
+      const reply = fala;
       this.lastReplyText = reply;
-      this.setData({ lastReply: clampForHud(reply) || '(sem texto)' });
+      this.setData({
+        replySource: source || '',
+        lastReply: clampForHud(tela) || '(sem texto)',
+        // A remote failure that fell back is not a dead end -- there is a reply
+        // on screen -- but hiding it would make a misconfigured key or an
+        // exhausted quota look like the remote model simply never being chosen.
+        lastError: remoteError ? clampErrorLine(remoteError, MAX_ERROR_CHARS) : '',
+      });
       // Deliberately not awaited. The registry is warmed at load and a model
       // round trip has since elapsed, so it is populated by now; awaiting here
       // bought a guarantee for one narrow case and cost three re-entrancy
@@ -519,7 +585,13 @@ export default {
   // Returns whether playback was dispatched. Host TTS exposes no utterance
   // lifecycle events, so this never waits for the audio to finish.
   speakReply(text) {
-    const content = normalizeText(text);
+    // Bounded here rather than at the call sites because every path into speech
+    // needs it -- a model reply, a replay, the greeting -- and because this is
+    // the last point before audio that cannot be stopped. `cancel()` is not
+    // exposed, so an utterance dispatched too long is time the wearer has no way
+    // to skip. The clamp ends on a sentence, so a cut reply still sounds like an
+    // answer rather than a device failing mid-word.
+    const content = clampSpeech(normalizeText(text));
     if (!content) {
       return false;
     }
@@ -570,7 +642,7 @@ export default {
 
     <view class="meta">
       <text class="meta-line">Host: {{hostLanguage}} · {{hostIsPortuguese ? 'compatível com pt' : 'não é pt'}}</text>
-      <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}}</text>
+      <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}} · REMOTO {{remoteAvailable}}</text>
     </view>
 
     <view class="status-row">
@@ -583,7 +655,7 @@ export default {
     </view>
 
     <view class="panel">
-      <text class="label">ASSISTENTE</text>
+      <text class="label">ASSISTENTE{{replySource ? ' · ' + replySource : ''}}</text>
       <text class="body">{{lastReply}}</text>
     </view>
 

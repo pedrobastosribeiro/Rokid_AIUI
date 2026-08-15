@@ -79,7 +79,7 @@ test('keeps HUD copy in Portuguese', () => {
     assert.equal(typeof value, 'string', key);
     assert.ok(value.trim().length > 0, key);
   }
-  assert.match(COPY.title, /Óculos Rokid/);
+  assert.match(COPY.title, /Axiom/);
   assert.match(COPY.greeting, /português/);
   assert.match(COPY.speakHint, /português brasileiro/);
 });
@@ -145,7 +145,21 @@ test('the system prompt starts neutral and mirrors the speaker, without caricatu
   assert.match(prompt, /nunca comente o sotaque/);
   // The register must not cost the constraints it sits between.
   assert.match(prompt, /português brasileiro \(pt-BR\)/);
-  assert.match(prompt, /Seja curto/);
+  assert.match(prompt, /no máximo duas frases/);
+});
+
+test('the length budget is countable, not an adjective or a pixel size', () => {
+  // "Seja curto" gives the model nothing to measure against, and the pixel size
+  // it used to carry ("um HUD de 480x352") is worse -- a true fact the model
+  // cannot convert into a sentence count. What replaced it has to stay
+  // countable, and has to keep banning the ritual that actually produces
+  // length: preamble, restating the question, and the offer to elaborate.
+  const prompt = getSystemPrompt();
+  assert.match(prompt, /no máximo duas frases/);
+  assert.match(prompt, /sem preâmbulo/);
+  assert.match(prompt, /sem repetir a pergunta/);
+  assert.match(prompt, /sem se oferecer para detalhar/);
+  assert.doesNotMatch(prompt, /480/);
 });
 
 test('the manifest carries the same register rules as the runtime prompt', () => {
@@ -156,7 +170,16 @@ test('the manifest carries the same register rules as the runtime prompt', () =>
     new URL('../samples/pt-br/AGENTS.md', import.meta.url),
     'utf8',
   );
-  for (const rule of [/Comece em português neutro/, /jeito mineiro/, /paulista/, /nunca comente o sotaque/]) {
+  for (const rule of [
+    /Comece em português neutro/,
+    /jeito mineiro/,
+    /paulista/,
+    /nunca comente o sotaque/,
+    // Length is a register decision too: a manifest that still asked for long
+    // answers would pull against the prompt on every single turn.
+    /no máximo duas frases/,
+    /sem preâmbulo/,
+  ]) {
     assert.match(manifest, rule);
     assert.match(getSystemPrompt(), rule);
   }
@@ -361,4 +384,46 @@ test('reopens discovery when the registry changes', async () => {
     const voicesNow = await ensureVoicesReady(60);
     assert.equal(pickPortugueseVoice(voicesNow).name, 'Luciana');
   });
+});
+
+test('the agent has a name of its own, distinct from the hardware', () => {
+  // "Óculos Rokid" was the agent name and the product name at once, and the
+  // collision broke invocation: asked for by name, the platform answered with
+  // glasses specifications instead of routing here, and pt-BR ASR transcribed
+  // it as "Rocket" about as often as "Rokid". A name the hardware does not
+  // already own is what makes the agent addressable.
+  assert.match(COPY.title, /Axiom/);
+  assert.match(getSystemPrompt(), /Seu nome é Axiom/);
+  assert.doesNotMatch(COPY.title, /Rokid/);
+
+  const manifest = readFileSync(
+    new URL('../samples/pt-br/AGENTS.md', import.meta.url),
+    'utf8',
+  );
+  // The Identity Name is the field AIUI Studio validates on upload, so it is
+  // the one that has to carry the new name, not just the HUD copy.
+  assert.match(manifest, /- \*\*Name\*\*: Axiom/);
+  assert.match(manifest, /Seu nome é Axiom/);
+});
+
+test('the agent understands other languages but answers only in pt-BR', () => {
+  // Two different problems wear the same label. Answering is a prompt decision
+  // and fully controllable. Understanding is not: `recognition.lang` takes one
+  // BCP 47 tag and the documented API has no multilingual or auto-detect mode,
+  // so English speech reaches the model already approximated into Portuguese
+  // spelling by a pt-BR recognizer. Telling the model that is the only lever
+  // there is, and losing either half silently breaks a case the wearer asked
+  // for -- so both are pinned here.
+  const prompt = getSystemPrompt();
+  assert.match(prompt, /Entenda o usuário em qualquer idioma/);
+  assert.match(prompt, /responda SEMPRE em português brasileiro/);
+  assert.match(prompt, /Nunca responda em inglês/);
+  assert.match(prompt, /inglês mal transcrito/);
+
+  const manifest = readFileSync(
+    new URL('../samples/pt-br/AGENTS.md', import.meta.url),
+    'utf8',
+  );
+  assert.match(manifest, /Entenda o usuário em qualquer idioma/);
+  assert.match(manifest, /inglês mal transcrito/);
 });
