@@ -1,4 +1,4 @@
-# Óculos Rokid (pt-BR)
+# Axiom (pt-BR)
 
 Default glasses voice loop in **Brazilian Portuguese (`pt-BR`)**. This is the communication of the glasses, not a specialty assistant you invoke only for Portuguese.
 
@@ -62,7 +62,7 @@ On the glasses:
 aix pack ./samples/pt-br -o pt-br.aix --engine '^0.14.0'
 ```
 
-3. In [AIUI Studio Global](https://aiui-global.rokid.com/), create the AIUI Agent with name **Óculos Rokid** (or the wake name you want) and bind the `.aix`
+3. In [AIUI Studio Global](https://aiui-global.rokid.com/), create the AIUI Agent with name **Axiom** (or the wake name you want) and bind the `.aix`
 4. On the glasses: **Settings → Developer → AIUI → Update Glasses Resource Package**
 5. Wake the glasses and speak Portuguese. The host should route general conversation here; you can also say the agent name.
 
@@ -75,10 +75,60 @@ samples/pt-br/
   app.json
   app.js
   lib/locale.js          # locale helper, copy, LLM prompt
+  lib/reply-format.js    # length budget, speech bound, two-channel reply
+  lib/remote-model.js    # optional OpenAI-compatible model over wx.request
+  lib/secrets.js         # local-only key placeholders (must stay empty in git)
   pages/index/index.ink  # HUD voice loop
   README.md
   CRAFT.md               # Craft GitHub import URL (do not use main/samples/pt-br)
 ```
+
+## Optional: a remote model
+
+The host model answers by default and needs no setup. Pointing the page at a
+stronger model is opt-in, and with no key configured nothing below changes how
+the sample behaves.
+
+`lib/remote-model.js` speaks the OpenAI chat-completions shape, so it works with
+any provider or gateway that does. It defaults to Groq, whose free tier costs
+nothing and is fast enough that the extra round trip is not felt.
+
+**Where the key goes.** Two places are read, in this order:
+
+1. **Device storage** — `storeApiKey(value)` writes to `wx.setStorageSync` under
+   `ptbr.remoteModel.apiKey`. Local to the device and isolated per agent
+   ([storage](../../documentation/3-api/storage-api.en-US.md)), so the key never
+   enters the repository or the packed `.aix`. This is the path meant to last.
+2. **`lib/secrets.js`** — paste a key into `REMOTE_API_KEY` to test, then clear
+   it. `npm test` fails the `secrets` check while it is non-empty.
+
+Storage wins when both are set, so a properly provisioned device never silently
+falls back to a key that shipped in the bundle.
+
+Use a key you can revoke and do not reuse it elsewhere. A key in `secrets.js`
+travels inside the `.aix` to Studio, which means it is published, and rotating it
+means shipping a new build — fine for a bench test, wrong to leave in place.
+Provisioning through storage avoids both: call `storeApiKey()` once from a
+temporary line, remove the line, rebuild. Storage survives the new build, so the
+key ends up on the device and in no commit.
+
+Set `REMOTE_BASE_URL` and `REMOTE_MODEL` to aim at something else — another
+OpenAI-compatible provider, a different Groq model, or a server of your own.
+Calling the provider directly is what this sample does and is a real choice, not
+a placeholder: one hop, nothing to operate. Its cost is that the key lives on the
+device and the prompt ships in the bundle, so changing either means a new build.
+A server in front trades that for having a server to run.
+
+**What it changes.** The remote model is asked for two texts rather than one:
+a spoken sentence and a short display fragment. They are different jobs — the
+ear wants a sentence, the ~100-character panel wants a headline — and one string
+serving both is what produces a reply that is too long to read and too clipped
+to sound natural. The host model has no response-format option, so on that path
+one string still serves both.
+
+If the remote call fails, the host model answers instead and the reason is shown
+on the error line. A 429 is ordinary on a free tier, and a wearer who asked a
+question should get an answer rather than an error where the answer was.
 
 ## Next deployments
 
