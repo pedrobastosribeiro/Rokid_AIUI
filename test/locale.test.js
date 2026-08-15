@@ -405,3 +405,25 @@ test('the agent has a name of its own, distinct from the hardware', () => {
   assert.match(manifest, /- \*\*Name\*\*: Axiom/);
   assert.match(manifest, /Seu nome é Axiom/);
 });
+
+test('the agent understands other languages but answers only in pt-BR', () => {
+  // Two different problems wear the same label. Answering is a prompt decision
+  // and fully controllable. Understanding is not: `recognition.lang` takes one
+  // BCP 47 tag and the documented API has no multilingual or auto-detect mode,
+  // so English speech reaches the model already approximated into Portuguese
+  // spelling by a pt-BR recognizer. Telling the model that is the only lever
+  // there is, and losing either half silently breaks a case the wearer asked
+  // for -- so both are pinned here.
+  const prompt = getSystemPrompt();
+  assert.match(prompt, /Entenda o usuário em qualquer idioma/);
+  assert.match(prompt, /responda SEMPRE em português brasileiro/);
+  assert.match(prompt, /Nunca responda em inglês/);
+  assert.match(prompt, /inglês mal transcrito/);
+
+  const manifest = readFileSync(
+    new URL('../samples/pt-br/AGENTS.md', import.meta.url),
+    'utf8',
+  );
+  assert.match(manifest, /Entenda o usuário em qualquer idioma/);
+  assert.match(manifest, /inglês mal transcrito/);
+});
