@@ -42,6 +42,15 @@ jobs:
       - name: Sample pages and components resolve
         run: node scripts/ci/validate.mjs samples
 
+      # This job names each check explicitly rather than running the whole
+      # validator, so a check added to validate.mjs does not run here until it
+      # is also added above. `secrets` spent a day in that gap -- the one check
+      # whose entire job is to stop a provider key reaching a public repository,
+      # and the only backstop that covers a commit authored in the GitHub web
+      # UI, where nothing local ever runs.
+      - name: No provider keys in tracked files
+        run: node scripts/ci/validate.mjs secrets
+
       - name: Markdown links resolve
         run: node scripts/ci/validate.mjs links
 

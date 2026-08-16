@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -129,4 +130,38 @@ test('the concision rules ban ritual, not just length', () => {
   assert.match(rules, /sem preâmbulo/);
   assert.match(rules, /sem repetir a pergunta/);
   assert.match(rules, /sem se oferecer para detalhar/);
+});
+
+// --- CI wiring -------------------------------------------------------------
+
+test('every validator check is invoked by the CI workflow', () => {
+  // The workflow names each check explicitly instead of running the validator
+  // whole, so a check added to validate.mjs silently does not run in CI until
+  // it is also added there. `secrets` spent a day in exactly that gap, which
+  // mattered because it is the only backstop covering a commit authored in the
+  // GitHub web UI -- no local hook runs on that path.
+  const validator = readFileSync(
+    new URL('../scripts/ci/validate.mjs', import.meta.url),
+    'utf8',
+  );
+  const workflow = readFileSync(
+    new URL('../.github/workflows/pr-checks.yml', import.meta.url),
+    'utf8',
+  );
+
+  const block = validator.slice(validator.indexOf('const checks = {'));
+  const declared = [...block.matchAll(/^ {2}([a-z]+)\(fail, note\)/gm)].map((m) => m[1]);
+  assert.ok(declared.length >= 8, `expected the check list, found ${declared.join(', ')}`);
+
+  // Anchored on `run:` rather than on the filename. Prose mentioning
+  // validate.mjs -- including the comment above the step this test exists to
+  // protect -- would otherwise be read as an invocation and quietly widen the
+  // set, which is the one way a parity check like this fails open.
+  const invoked = new Set(
+    [...workflow.matchAll(/run:\s*node scripts\/ci\/validate\.mjs ([a-z][a-z ]*)/g)].flatMap((m) =>
+      m[1].trim().split(/\s+/),
+    ),
+  );
+  const missing = declared.filter((name) => !invoked.has(name));
+  assert.deepEqual(missing, [], `checks defined but never run in CI: ${missing.join(', ')}`);
 });
