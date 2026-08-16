@@ -1,5 +1,5 @@
 // Paste a provider key here to test on device, and take it out before you
-// commit. `npm test` fails the `samples` check while this is non-empty, so the
+// commit. `npm test` fails the `secrets` check while this is non-empty, so the
 // mistake is caught by CI rather than by someone finding the key later.
 //
 // This is the *testing* path, not the design. A key that lives in this file

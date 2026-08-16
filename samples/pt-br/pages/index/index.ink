@@ -172,11 +172,16 @@ export default {
     capabilities: '',
     isBusy: false,
     liveTranscript: '',
-    // Which path produced the reply on screen: 'GROQ' or 'HOST'. Empty before
+    // Which path produced the reply on screen: 'REMOTO' or 'HOST'. Empty before
     // the first turn. Without this the fallback is invisible -- a key that was
     // never picked up looks exactly like a working host-only build, which is
     // the difference between "the remote model is off" and "I configured it and
     // something is wrong", and those need opposite next steps.
+    //
+    // Named for the path, not the provider. `REMOTE_BASE_URL` and
+    // `REMOTE_MODEL` can point anywhere OpenAI-compatible, so a 'GROQ' label
+    // would be a fact the page cannot actually know -- and a status field that
+    // states an unverified fact is the failure this field exists to prevent.
     replySource: '',
     lastReply: COPY.greeting,
     lastError: '',
@@ -539,7 +544,7 @@ export default {
           screenLimit: MAX_HUD_CHARS,
         });
         if (fala) {
-          return { fala, tela, source: 'GROQ' };
+          return { fala, tela, source: 'REMOTO' };
         }
         // An empty reply is a failure that did not throw.
         return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.');

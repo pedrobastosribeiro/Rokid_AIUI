@@ -465,3 +465,13 @@ test('the status line is rebuilt from instance state, not from data', () => {
   assert.ok(rebuild, 'expected refreshAvailability to rebuild the capability line');
   assert.doesNotMatch(rebuild[0], /this\.data\./, 'the rebuild must not read back through data');
 });
+
+test('the reply source names the path, not a provider', () => {
+  // REMOTE_BASE_URL and REMOTE_MODEL can point at any OpenAI-compatible
+  // endpoint, so a 'GROQ' label would assert a fact the page cannot know. A
+  // status field that states something unverified is the exact failure this
+  // field was added to prevent, so the label has to stay provider-neutral.
+  assert.match(inkSource, /source: 'REMOTO'/);
+  assert.doesNotMatch(inkSource, /source: 'GROQ'/);
+  assert.doesNotMatch(inkSource, /'GROQ' or 'HOST'/);
+});
