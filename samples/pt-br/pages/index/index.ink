@@ -211,6 +211,13 @@ export default {
     const ttsAvailable =
       typeof speechSynthesis !== 'undefined' &&
       typeof SpeechSynthesisUtterance !== 'undefined';
+    // Kept on the instance as well as in `data`, because refreshAvailability()
+    // rebuilds the status line and would otherwise read these back out of
+    // `this.data` -- values a preceding setData() wrote. Nothing documents
+    // setData as synchronous, and a stale read there would print "ASR - TTS -
+    // REMOTO -" on a device where all three work, which is precisely the lie
+    // this line exists to prevent. Plain properties have no such question.
+    this.capabilityFlags = { asr: asrAvailable, tts: ttsAvailable, remote: remoteAvailable };
     this.setData({
       hostLanguage: hostLanguage || '(host não informou)',
       hostIsPortuguese: isPortuguese(hostLanguage),
@@ -348,9 +355,7 @@ export default {
     this.setData({
       capabilities: buildCapabilityLine({
         llm: llmAvailable,
-        asr: this.data.asrAvailable,
-        tts: this.data.ttsAvailable,
-        remote: this.data.remoteAvailable,
+        ...(this.capabilityFlags || {}),
       }),
     });
   },

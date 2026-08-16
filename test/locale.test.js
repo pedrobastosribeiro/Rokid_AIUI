@@ -452,3 +452,16 @@ test('REMOTE_REQUIRED turns a remote failure into the answer', () => {
   assert.match(inkSource, /if \(REMOTE_REQUIRED\)/);
   assert.match(inkSource, /source: 'ERRO'/);
 });
+
+test('the status line is rebuilt from instance state, not from data', () => {
+  // refreshAvailability() rebuilds the line after LanguageModel.availability()
+  // resolves. Reading the other three flags back out of `this.data` would make
+  // that rebuild depend on a preceding setData() having already applied, and
+  // nothing documents setData as synchronous. A stale read prints "ASR - TTS -
+  // REMOTO -" on a device where all three work -- the exact lie the line was
+  // added to prevent, in the one place someone would trust it.
+  assert.match(inkSource, /this\.capabilityFlags = \{/);
+  const rebuild = inkSource.match(/capabilities: buildCapabilityLine\(\{\s*llm: llmAvailable,[\s\S]{0,160}?\}\)/);
+  assert.ok(rebuild, 'expected refreshAvailability to rebuild the capability line');
+  assert.doesNotMatch(rebuild[0], /this\.data\./, 'the rebuild must not read back through data');
+});
