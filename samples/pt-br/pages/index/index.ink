@@ -518,8 +518,20 @@ export default {
       }
       return;
     }
-    // A model request cannot be cancelled; keep the turn busy until it settles.
     if (this.promptInFlight) {
+      // A remote request *can* be cancelled -- `RequestTask.abort()` -- and
+      // leaving Parar inert during one strands the wearer on "Pensando…" for
+      // the full 12-second timeout with no way out. Invalidate the turn first
+      // so the reply is discarded even if it lands anyway, then abort.
+      if (this.remote && this.remote.isConfigured()) {
+        this.activeTurnId += 1;
+        this.promptInFlight = false;
+        this.remote.abort();
+        this.setData({ isBusy: false, status: COPY.idle });
+        return;
+      }
+      // The host session exposes no cancellation, so a turn on that path still
+      // has to run to completion.
       return;
     }
     this.setData({ isBusy: false, status: COPY.idle });
@@ -536,23 +548,33 @@ export default {
   // answer was. The cost is a second round trip on the slow path, which is the
   // right trade when the alternative is silence.
   async requestReply(prompt) {
-    if (this.remote && this.remote.isConfigured()) {
-      try {
-        const { fala, tela } = await this.remote.complete({
-          system: getSystemPrompt(),
-          prompt,
-          screenLimit: MAX_HUD_CHARS,
-        });
-        if (fala) {
-          return { fala, tela, source: 'REMOTO' };
-        }
-        // An empty reply is a failure that did not throw.
-        return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.');
-      } catch (error) {
-        return this.afterRemoteFailure(prompt, getErrorMessage(error));
+    // Checked before the configuration shortcut, not after. `isConfigured()` is
+    // false both when no key was ever set and when reading device storage
+    // throws, and the second is a failure the wearer needs told. Letting an
+    // unconfigured build skip straight to the host would defeat the flag in the
+    // one case it was added for: the flag exists to stop a host answer standing
+    // in for a remote one, and "no key resolved" is exactly that substitution.
+    if (!(this.remote && this.remote.isConfigured())) {
+      if (REMOTE_REQUIRED) {
+        return this.afterRemoteFailure(prompt, 'Modelo remoto exigido, mas nenhuma chave foi resolvida.');
       }
+      return this.hostReply(prompt);
     }
-    return this.hostReply(prompt);
+
+    try {
+      const { fala, tela } = await this.remote.complete({
+        system: getSystemPrompt(),
+        prompt,
+        screenLimit: MAX_HUD_CHARS,
+      });
+      if (fala) {
+        return { fala, tela, source: 'REMOTO' };
+      }
+      // An empty reply is a failure that did not throw.
+      return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.');
+    } catch (error) {
+      return this.afterRemoteFailure(prompt, getErrorMessage(error));
+    }
   },
 
   // With REMOTE_REQUIRED the failure *is* the answer, and the wearer hears it.
@@ -565,7 +587,16 @@ export default {
     if (REMOTE_REQUIRED) {
       return { fala: message, tela: message, source: 'ERRO', remoteError: message };
     }
-    return { ...(await this.hostReply(prompt)), remoteError: message };
+    try {
+      return { ...(await this.hostReply(prompt)), remoteError: message };
+    } catch (hostError) {
+      // Both paths are down, and the remote diagnostic is the one worth having:
+      // letting this throw would surface only the host's error, hiding the
+      // reason the remote call failed -- which is the single thing this whole
+      // change exists to expose. Rethrowing a combined message keeps the outer
+      // handler's behaviour and loses neither half.
+      throw new Error(`${message} (host também falhou: ${getErrorMessage(hostError)})`);
+    }
   },
 
   async hostReply(prompt) {

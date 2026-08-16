@@ -475,3 +475,33 @@ test('the reply source names the path, not a provider', () => {
   assert.doesNotMatch(inkSource, /source: 'GROQ'/);
   assert.doesNotMatch(inkSource, /'GROQ' or 'HOST'/);
 });
+
+test('REMOTE_REQUIRED is enforced before the configuration shortcut', () => {
+  // `isConfigured()` is false both when no key was ever set and when reading
+  // device storage throws. Checking it first and returning a host answer would
+  // defeat the flag in the one case it was added for -- the flag exists to stop
+  // a host answer standing in for a remote one, and "no key resolved" is
+  // exactly that substitution.
+  const guard = inkSource.match(
+    /if \(!\(this\.remote && this\.remote\.isConfigured\(\)\)\) \{([\s\S]*?)\n {4}\}/,
+  );
+  assert.ok(guard, 'expected an unconfigured branch in requestReply');
+  assert.match(guard[1], /REMOTE_REQUIRED/, 'the unconfigured branch must honour the flag');
+  assert.match(guard[1], /afterRemoteFailure/);
+});
+
+test('a remote failure survives a host fallback that also fails', () => {
+  // Letting the host error propagate alone would hide the remote diagnostic --
+  // the single thing REMOTE_REQUIRED and the source label were added to expose.
+  assert.match(inkSource, /host também falhou/);
+});
+
+test('Parar aborts a remote request instead of waiting out the timeout', () => {
+  // RequestTask.abort() exists, so leaving Parar inert strands the wearer on
+  // "Pensando…" for the full timeout with no way out. The turn is invalidated
+  // first so a reply that lands anyway is discarded rather than spoken over.
+  const stop = inkSource.match(/stopTalk\(\) \{[\s\S]*?\n {2}\},/);
+  assert.ok(stop, 'expected stopTalk');
+  assert.match(stop[0], /this\.remote\.abort\(\)/);
+  assert.match(stop[0], /this\.activeTurnId \+= 1/);
+});

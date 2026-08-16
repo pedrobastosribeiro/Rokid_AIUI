@@ -51,7 +51,13 @@ export function clampSpeech(value, limit = MAX_SPEECH_CHARS) {
     lastEnd = match.index + 1;
     match = terminators.exec(window);
   }
-  if (lastEnd > 0) {
+  // A period is not proof of a sentence. "O Dr. Silva recomenda…" puts one four
+  // characters in, and cutting there would speak "O Dr." and drop the answer --
+  // a far worse outcome than the mid-sentence cut this branch exists to avoid.
+  // So the boundary has to earn it: keep it only when it leaves most of the
+  // budget used. Below that, the word-boundary fallback is the better cut.
+  const MIN_USEFUL_FRACTION = 0.6;
+  if (lastEnd > 0 && lastEnd >= limit * MIN_USEFUL_FRACTION) {
     return window.slice(0, lastEnd).trim();
   }
 

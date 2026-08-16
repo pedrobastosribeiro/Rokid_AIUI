@@ -150,7 +150,15 @@ test('every validator check is invoked by the CI workflow', () => {
   );
 
   const block = validator.slice(validator.indexOf('const checks = {'));
-  const declared = [...block.matchAll(/^ {2}([a-z]+)\(fail, note\)/gm)].map((m) => m[1]);
+  // The validator runs every `Object.keys(checks)` entry, so anything this
+  // regex fails to recognise is a check that runs under `npm test` and is
+  // exempt from the parity it is supposed to be held to. Accepting the full
+  // identifier alphabet plus quoted keys keeps the two sets describing the
+  // same thing; a narrower pattern would let `reply_format` or `'json-2'`
+  // slip past the very assertion meant to catch them.
+  const declared = [
+    ...block.matchAll(/^ {2}(?:['"]([^'"]+)['"]|([A-Za-z_$][\w$]*))\(fail, note\)/gm),
+  ].map((m) => m[1] || m[2]);
   assert.ok(declared.length >= 8, `expected the check list, found ${declared.join(', ')}`);
 
   // Anchored on `run:` rather than on the filename. Prose mentioning
@@ -164,4 +172,71 @@ test('every validator check is invoked by the CI workflow', () => {
   );
   const missing = declared.filter((name) => !invoked.has(name));
   assert.deepEqual(missing, [], `checks defined but never run in CI: ${missing.join(', ')}`);
+});
+
+test('the key scan matches project-scoped keys containing underscores', () => {
+  // A class that stops at `_` cannot then satisfy a trailing `\b`, because `_`
+  // is itself a word character -- so `sk-proj-<seg>_<seg>` failed to match at
+  // all and sailed through. A scanner that silently misses a current key format
+  // is worse than no scanner, because it is trusted.
+  const validator = readFileSync(
+    new URL('../scripts/ci/validate.mjs', import.meta.url),
+    'utf8',
+  );
+  const shapes = [...validator.matchAll(/\[(\/\\b(?:gsk_|sk-)[^/]+\/), '/g)].map((m) => m[1]);
+  assert.equal(shapes.length, 2, `expected two key shapes, got ${shapes.join(' ')}`);
+
+  const samples = [
+    'gsk_' + 'a'.repeat(44),
+    'sk-' + 'b'.repeat(44),
+    'sk-proj-' + 'c'.repeat(30) + '_' + 'd'.repeat(20),
+    'gsk_' + 'e'.repeat(20) + '_' + 'f'.repeat(30),
+  ];
+  for (const sample of samples) {
+    const hit = shapes.some((source) => {
+      const body = source.slice(1, source.lastIndexOf('/'));
+      return new RegExp(body).test(`const K = '${sample}';`);
+    });
+    assert.ok(hit, `no key shape matched ${sample.slice(0, 12)}…`);
+  }
+});
+
+test('the secrets check enforces emptiness only on secret-bearing names', () => {
+  // `secrets.js` also carries REMOTE_BASE_URL and REMOTE_MODEL, which the
+  // sample's README tells you to fill in to aim at another provider and which
+  // must survive into the packed app. Requiring every uppercase export to be
+  // empty made the documented customisation impossible to commit.
+  const validator = readFileSync(
+    new URL('../scripts/ci/validate.mjs', import.meta.url),
+    'utf8',
+  );
+  const pattern = validator.match(/const SECRET_NAME = (\/[^/]+\/)/);
+  assert.ok(pattern, 'expected a SECRET_NAME pattern');
+  const body = pattern[1].slice(1, -1);
+  const matcher = new RegExp(body);
+  for (const name of ['REMOTE_API_KEY', 'AUTH_TOKEN', 'CLIENT_SECRET']) {
+    assert.ok(matcher.test(name), `${name} should be treated as a secret`);
+  }
+  for (const name of ['REMOTE_BASE_URL', 'REMOTE_MODEL']) {
+    assert.ok(!matcher.test(name), `${name} is public configuration, not a secret`);
+  }
+});
+
+test('an early abbreviation does not truncate the whole reply', () => {
+  // "O Dr. Silva recomenda…" puts a period four characters in. Cutting there
+  // would speak "O Dr." and discard the answer, which is far worse than the
+  // mid-sentence cut the sentence-boundary branch exists to avoid.
+  const text = 'O Dr. Silva recomenda descansar bastante e beber muita água durante o dia todo';
+  const clamped = clampSpeech(text, 50);
+  assert.notEqual(clamped, 'O Dr.');
+  assert.ok(clamped.length > 25, `cut far too early: ${clamped}`);
+  assert.ok(clamped.length <= 50);
+});
+
+test('a genuine sentence end near the budget is still preferred', () => {
+  // The abbreviation guard must not cost the normal case: when a real sentence
+  // closes late in the window, that is still the right place to stop.
+  const text = 'Está fazendo vinte e dois graus agora. Deve chover mais tarde na cidade toda.';
+  const clamped = clampSpeech(text, 45);
+  assert.equal(clamped, 'Está fazendo vinte e dois graus agora.');
 });

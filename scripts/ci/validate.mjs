@@ -299,6 +299,13 @@ const checks = {
   secrets(fail, note) {
     let placeholders = 0;
 
+    // Only the secret-bearing names must stay empty. `secrets.js` also carries
+    // public provider settings -- REMOTE_BASE_URL, REMOTE_MODEL -- which the
+    // sample's README tells you to fill in to aim at another provider, and
+    // which have to survive into the packed app for that to work. Failing on
+    // those would make the documented customisation impossible to commit.
+    const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/;
+
     for (const file of tracked('samples/*/lib/secrets.js')) {
       const source = read(file);
       // Matches the committed shape: `export const NAME = '';`. A filled-in
@@ -307,6 +314,7 @@ const checks = {
         /export\s+const\s+([A-Z0-9_]+)\s*=\s*(['"])(.*?)\2/g,
       );
       for (const [, name, , value] of assignments) {
+        if (!SECRET_NAME.test(name)) continue;
         placeholders += 1;
         if (value.trim()) {
           fail(`${file}: ${name} is not empty -- clear it before committing`);
@@ -317,9 +325,16 @@ const checks = {
     // A key can land anywhere, not only in the file set aside for it. These two
     // shapes are specific enough not to fire on prose: both carry a fixed prefix
     // and a long opaque tail.
+    //
+    // The tail alphabet includes `_`, and there is no trailing `\b`. Both matter
+    // for project-scoped keys like `sk-proj-<segment>_<segment>`: a class that
+    // stops at the underscore cannot then satisfy a word boundary, because `_`
+    // is itself a word character, so the whole match fails and the key sails
+    // through. A scanner that silently misses a current key format is worse
+    // than none, since it is trusted.
     const KEY_SHAPES = [
-      [/\bgsk_[A-Za-z0-9]{40,}\b/, 'a Groq key'],
-      [/\bsk-[A-Za-z0-9-]{40,}\b/, 'an OpenAI-style key'],
+      [/\bgsk_[A-Za-z0-9_-]{40,}/, 'a Groq key'],
+      [/\bsk-[A-Za-z0-9_-]{40,}/, 'an OpenAI-style key'],
     ];
     const scanned = tracked(
       '*.js', '*.mjs', '*.cjs', '*.ts', '*.ink', '*.json', '*.md', '*.yml', '*.wxml',
