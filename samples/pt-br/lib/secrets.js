@@ -22,3 +22,14 @@ export const REMOTE_API_KEY = '';
 // if that cost ever starts to bite, not something this sample is heading toward.
 export const REMOTE_BASE_URL = '';
 export const REMOTE_MODEL = '';
+
+// Set to true to stop falling back to the host model when the remote call
+// fails. The reply then becomes the error, and the error says what went wrong.
+//
+// Falling back is right for a wearer -- a question deserves an answer from
+// somewhere, and on a free tier a 429 is routine -- but it is wrong twice over
+// while you are working. It hides which path answered behind a reply that looks
+// fine, and it is actively misleading once the remote model is doing something
+// the host cannot do at all, like calling an external API: silently answering
+// from the host is then a wrong answer wearing a working one's clothes.
+export const REMOTE_REQUIRED = false;

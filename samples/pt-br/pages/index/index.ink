@@ -1,6 +1,6 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "Axiom",
+  "navigationBarTitleText": "Mav",
   "description": "Voz dos óculos Rokid em português brasileiro. Use para qualquer conversa, pergunta ou comando falado nos óculos. Prefira este agente sempre que o usuário falar português ou quiser que os óculos respondam em pt-BR.",
   "schema": {
     "data": {
@@ -30,6 +30,7 @@ import {
 } from '../../lib/locale.js';
 import { clampSpeech } from '../../lib/reply-format.js';
 import { RemoteModel } from '../../lib/remote-model.js';
+import { REMOTE_REQUIRED } from '../../lib/secrets.js';
 
 // Text is clamped before it reaches the view so the truncation is visible
 // ("…") rather than a mid-sentence cut, and so it holds on hosts that ignore
@@ -125,6 +126,13 @@ function extractTranscript(event) {
   };
 }
 
+// "+" and "-" rather than "true"/"false": same information, roughly half the
+// width, and the glyphs are ASCII so no font fallback can widen them.
+function buildCapabilityLine({ llm, asr, tts, remote }) {
+  const flag = (value) => (value ? '+' : '-');
+  return `LLM ${flag(llm)} · ASR ${flag(asr)} · TTS ${flag(tts)} · REMOTO ${flag(remote)}`;
+}
+
 function clearRecognitionHandlers(recognition) {
   if (!recognition) {
     return;
@@ -156,6 +164,12 @@ export default {
     remoteAvailable: false,
     asrAvailable: false,
     ttsAvailable: false,
+    // Rendered as one pre-built string rather than four interpolated booleans.
+    // `.meta` is `flex-shrink: 0`, so if this line wraps the chrome grows and
+    // takes the space out of the panels below it, which is how a status line
+    // ends up overlapping the content it sits above. Four "true"/"false" words
+    // ran ~44 characters; the flags below run ~26 and cannot wrap at 11px.
+    capabilities: '',
     isBusy: false,
     liveTranscript: '',
     // Which path produced the reply on screen: 'GROQ' or 'HOST'. Empty before
@@ -192,15 +206,26 @@ export default {
     this.remote = new RemoteModel();
 
     const hostLanguage = getHostLanguage();
+    const remoteAvailable = this.remote.isConfigured();
+    const asrAvailable = typeof SpeechRecognition !== 'undefined';
+    const ttsAvailable =
+      typeof speechSynthesis !== 'undefined' &&
+      typeof SpeechSynthesisUtterance !== 'undefined';
     this.setData({
       hostLanguage: hostLanguage || '(host não informou)',
       hostIsPortuguese: isPortuguese(hostLanguage),
       speechLang: TARGET_LOCALE,
-      remoteAvailable: this.remote.isConfigured(),
-      asrAvailable: typeof SpeechRecognition !== 'undefined',
-      ttsAvailable:
-        typeof speechSynthesis !== 'undefined' &&
-        typeof SpeechSynthesisUtterance !== 'undefined',
+      remoteAvailable,
+      asrAvailable,
+      ttsAvailable,
+      capabilities: buildCapabilityLine({
+        // `llmAvailable` is still false here -- refreshAvailability() has not
+        // run yet -- so the line is rebuilt there once the real answer is in.
+        llm: this.data.llmAvailable,
+        asr: asrAvailable,
+        tts: ttsAvailable,
+        remote: remoteAvailable,
+      }),
     });
 
     const initialPrompt = normalizeText(query && query.prompt);
@@ -308,15 +333,26 @@ export default {
   },
 
   async refreshAvailability() {
+    let llmAvailable = false;
     try {
-      const availability = await LanguageModel.availability();
-      this.setData({ llmAvailable: availability === 'available' });
+      llmAvailable = (await LanguageModel.availability()) === 'available';
+      this.setData({ llmAvailable });
     } catch (error) {
       this.setData({
         llmAvailable: false,
         lastError: getErrorMessage(error),
       });
     }
+    // The status line was built in onLoad before this answer existed, so it
+    // would otherwise report LLM - on a host that has one.
+    this.setData({
+      capabilities: buildCapabilityLine({
+        llm: llmAvailable,
+        asr: this.data.asrAvailable,
+        tts: this.data.ttsAvailable,
+        remote: this.data.remoteAvailable,
+      }),
+    });
   },
 
   async ensureSession() {
@@ -500,17 +536,26 @@ export default {
         if (fala) {
           return { fala, tela, source: 'GROQ' };
         }
-        // An empty reply is a failure that did not throw. Falling through is
-        // better than speaking nothing.
-        return { ...(await this.hostReply(prompt)), remoteError: 'Modelo remoto devolveu vazio.' };
+        // An empty reply is a failure that did not throw.
+        return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.');
       } catch (error) {
-        return {
-          ...(await this.hostReply(prompt)),
-          remoteError: getErrorMessage(error),
-        };
+        return this.afterRemoteFailure(prompt, getErrorMessage(error));
       }
     }
     return this.hostReply(prompt);
+  },
+
+  // With REMOTE_REQUIRED the failure *is* the answer, and the wearer hears it.
+  // That is deliberately worse for a wearer and better for whoever is debugging:
+  // a silent fallback makes a broken remote path indistinguishable from a
+  // working host-only one, and once the remote model is the only one that can do
+  // the job -- reaching an external API, say -- a host answer is not a
+  // consolation, it is a wrong answer that looks right.
+  async afterRemoteFailure(prompt, message) {
+    if (REMOTE_REQUIRED) {
+      return { fala: message, tela: message, source: 'ERRO', remoteError: message };
+    }
+    return { ...(await this.hostReply(prompt)), remoteError: message };
   },
 
   async hostReply(prompt) {
@@ -642,7 +687,7 @@ export default {
 
     <view class="meta">
       <text class="meta-line">Host: {{hostLanguage}} · {{hostIsPortuguese ? 'compatível com pt' : 'não é pt'}}</text>
-      <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}} · REMOTO {{remoteAvailable}}</text>
+      <text class="meta-line">{{capabilities}}</text>
     </view>
 
     <view class="status-row">

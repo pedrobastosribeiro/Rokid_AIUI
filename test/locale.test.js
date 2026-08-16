@@ -79,7 +79,7 @@ test('keeps HUD copy in Portuguese', () => {
     assert.equal(typeof value, 'string', key);
     assert.ok(value.trim().length > 0, key);
   }
-  assert.match(COPY.title, /Axiom/);
+  assert.match(COPY.title, /Mav/);
   assert.match(COPY.greeting, /português/);
   assert.match(COPY.speakHint, /português brasileiro/);
 });
@@ -392,8 +392,8 @@ test('the agent has a name of its own, distinct from the hardware', () => {
   // glasses specifications instead of routing here, and pt-BR ASR transcribed
   // it as "Rocket" about as often as "Rokid". A name the hardware does not
   // already own is what makes the agent addressable.
-  assert.match(COPY.title, /Axiom/);
-  assert.match(getSystemPrompt(), /Seu nome é Axiom/);
+  assert.match(COPY.title, /Mav/);
+  assert.match(getSystemPrompt(), /Seu nome é Mav/);
   assert.doesNotMatch(COPY.title, /Rokid/);
 
   const manifest = readFileSync(
@@ -402,8 +402,8 @@ test('the agent has a name of its own, distinct from the hardware', () => {
   );
   // The Identity Name is the field AIUI Studio validates on upload, so it is
   // the one that has to carry the new name, not just the HUD copy.
-  assert.match(manifest, /- \*\*Name\*\*: Axiom/);
-  assert.match(manifest, /Seu nome é Axiom/);
+  assert.match(manifest, /- \*\*Name\*\*: Mav/);
+  assert.match(manifest, /Seu nome é Mav/);
 });
 
 test('the agent understands other languages but answers only in pt-BR', () => {
@@ -426,4 +426,29 @@ test('the agent understands other languages but answers only in pt-BR', () => {
   );
   assert.match(manifest, /Entenda o usuário em qualquer idioma/);
   assert.match(manifest, /inglês mal transcrito/);
+});
+
+test('the status line stays short enough not to wrap', () => {
+  // `.meta` is flex-shrink: 0, so a wrapped status line grows the chrome and
+  // takes the height out of the panels below -- which is how a status line ends
+  // up overlapping the content it sits above. Four spelled-out booleans ran ~44
+  // characters; this has to stay well under what fits on one 11px line.
+  const line = inkSource.match(/return `LLM \$\{flag\(llm\)\}[^`]*`/);
+  assert.ok(line, 'expected buildCapabilityLine to build the status line');
+  const rendered = line[0]
+    .replace(/^return `/, '')
+    .replace(/`$/, '')
+    .replace(/\$\{flag\([a-z]+\)\}/g, '+');
+  assert.ok(rendered.length <= 32, `status line is ${rendered.length} chars: ${rendered}`);
+  assert.match(rendered, /REMOTO/);
+});
+
+test('REMOTE_REQUIRED turns a remote failure into the answer', () => {
+  // Falling back to the host is right for a wearer and wrong while debugging,
+  // and actively misleading once the remote model is the only one that can do
+  // the job -- reaching an external API, say -- because a host answer then looks
+  // like success. The flag has to reach the page, not just exist in secrets.
+  assert.match(inkSource, /import \{ REMOTE_REQUIRED \}/);
+  assert.match(inkSource, /if \(REMOTE_REQUIRED\)/);
+  assert.match(inkSource, /source: 'ERRO'/);
 });

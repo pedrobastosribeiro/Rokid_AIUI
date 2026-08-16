@@ -33,7 +33,7 @@ Two different jobs share the same filename. Do not collapse them.
   # Agent Manifest
 
   ## Identity
-  - **Name**: Axiom
+  - **Name**: Mav
   - **Version**: 0.2.0
 
   ## Capabilities
