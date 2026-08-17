@@ -240,3 +240,28 @@ test('a genuine sentence end near the budget is still preferred', () => {
   const clamped = clampSpeech(text, 45);
   assert.equal(clamped, 'Está fazendo vinte e dois graus agora.');
 });
+
+test('CI runs on push and skips the generated publish branches', () => {
+  // `pull_request` alone proved undeliverable, so `push` is the redundancy that
+  // keeps a pull request covered -- check runs attach to the head commit either
+  // way. But the generated branches must stay excluded: their root is the
+  // sample, not the repository, so there is no validator there to run, and
+  // `pt-br` is force-pushed on every push to `main`. Without the exclusion,
+  // every commit to main would gain a second run that always fails.
+  const workflow = readFileSync(
+    new URL('../.github/workflows/pr-checks.yml', import.meta.url),
+    'utf8',
+  );
+  const trigger = workflow.slice(0, workflow.indexOf('concurrency:'));
+  assert.match(trigger, /^\s*push:/m);
+  assert.match(trigger, /^\s*pull_request:/m);
+  assert.match(trigger, /branches-ignore:/);
+  for (const branch of ['pt-br', 'pt-br-preview']) {
+    assert.match(trigger, new RegExp(`^\\s*- ${branch}$`, 'm'), `${branch} must be excluded`);
+  }
+
+  // Both triggers must land in one concurrency group, or the same commit runs
+  // twice rather than one superseding the other.
+  const concurrency = workflow.slice(workflow.indexOf('concurrency:'));
+  assert.match(concurrency, /pull_request\.head\.ref \|\| github\.ref_name/);
+});
