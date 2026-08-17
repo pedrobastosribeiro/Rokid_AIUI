@@ -1,6 +1,6 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "Axiom",
+  "navigationBarTitleText": "Mav",
   "description": "Voz dos óculos Rokid em português brasileiro. Use para qualquer conversa, pergunta ou comando falado nos óculos. Prefira este agente sempre que o usuário falar português ou quiser que os óculos respondam em pt-BR.",
   "schema": {
     "data": {
@@ -30,6 +30,7 @@ import {
 } from '../../lib/locale.js';
 import { clampSpeech } from '../../lib/reply-format.js';
 import { RemoteModel } from '../../lib/remote-model.js';
+import { REMOTE_REQUIRED } from '../../lib/secrets.js';
 
 // Text is clamped before it reaches the view so the truncation is visible
 // ("…") rather than a mid-sentence cut, and so it holds on hosts that ignore
@@ -125,6 +126,13 @@ function extractTranscript(event) {
   };
 }
 
+// "+" and "-" rather than "true"/"false": same information, roughly half the
+// width, and the glyphs are ASCII so no font fallback can widen them.
+function buildCapabilityLine({ llm, asr, tts, remote }) {
+  const flag = (value) => (value ? '+' : '-');
+  return `LLM ${flag(llm)} · ASR ${flag(asr)} · TTS ${flag(tts)} · REMOTO ${flag(remote)}`;
+}
+
 function clearRecognitionHandlers(recognition) {
   if (!recognition) {
     return;
@@ -156,13 +164,24 @@ export default {
     remoteAvailable: false,
     asrAvailable: false,
     ttsAvailable: false,
+    // Rendered as one pre-built string rather than four interpolated booleans.
+    // `.meta` is `flex-shrink: 0`, so if this line wraps the chrome grows and
+    // takes the space out of the panels below it, which is how a status line
+    // ends up overlapping the content it sits above. Four "true"/"false" words
+    // ran ~44 characters; the flags below run ~26 and cannot wrap at 11px.
+    capabilities: '',
     isBusy: false,
     liveTranscript: '',
-    // Which path produced the reply on screen: 'GROQ' or 'HOST'. Empty before
+    // Which path produced the reply on screen: 'REMOTO' or 'HOST'. Empty before
     // the first turn. Without this the fallback is invisible -- a key that was
     // never picked up looks exactly like a working host-only build, which is
     // the difference between "the remote model is off" and "I configured it and
     // something is wrong", and those need opposite next steps.
+    //
+    // Named for the path, not the provider. `REMOTE_BASE_URL` and
+    // `REMOTE_MODEL` can point anywhere OpenAI-compatible, so a 'GROQ' label
+    // would be a fact the page cannot actually know -- and a status field that
+    // states an unverified fact is the failure this field exists to prevent.
     replySource: '',
     lastReply: COPY.greeting,
     lastError: '',
@@ -192,15 +211,33 @@ export default {
     this.remote = new RemoteModel();
 
     const hostLanguage = getHostLanguage();
+    const remoteAvailable = this.remote.isConfigured();
+    const asrAvailable = typeof SpeechRecognition !== 'undefined';
+    const ttsAvailable =
+      typeof speechSynthesis !== 'undefined' &&
+      typeof SpeechSynthesisUtterance !== 'undefined';
+    // Kept on the instance as well as in `data`, because refreshAvailability()
+    // rebuilds the status line and would otherwise read these back out of
+    // `this.data` -- values a preceding setData() wrote. Nothing documents
+    // setData as synchronous, and a stale read there would print "ASR - TTS -
+    // REMOTO -" on a device where all three work, which is precisely the lie
+    // this line exists to prevent. Plain properties have no such question.
+    this.capabilityFlags = { asr: asrAvailable, tts: ttsAvailable, remote: remoteAvailable };
     this.setData({
       hostLanguage: hostLanguage || '(host não informou)',
       hostIsPortuguese: isPortuguese(hostLanguage),
       speechLang: TARGET_LOCALE,
-      remoteAvailable: this.remote.isConfigured(),
-      asrAvailable: typeof SpeechRecognition !== 'undefined',
-      ttsAvailable:
-        typeof speechSynthesis !== 'undefined' &&
-        typeof SpeechSynthesisUtterance !== 'undefined',
+      remoteAvailable,
+      asrAvailable,
+      ttsAvailable,
+      capabilities: buildCapabilityLine({
+        // `llmAvailable` is still false here -- refreshAvailability() has not
+        // run yet -- so the line is rebuilt there once the real answer is in.
+        llm: this.data.llmAvailable,
+        asr: asrAvailable,
+        tts: ttsAvailable,
+        remote: remoteAvailable,
+      }),
     });
 
     const initialPrompt = normalizeText(query && query.prompt);
@@ -308,15 +345,24 @@ export default {
   },
 
   async refreshAvailability() {
+    let llmAvailable = false;
     try {
-      const availability = await LanguageModel.availability();
-      this.setData({ llmAvailable: availability === 'available' });
+      llmAvailable = (await LanguageModel.availability()) === 'available';
+      this.setData({ llmAvailable });
     } catch (error) {
       this.setData({
         llmAvailable: false,
         lastError: getErrorMessage(error),
       });
     }
+    // The status line was built in onLoad before this answer existed, so it
+    // would otherwise report LLM - on a host that has one.
+    this.setData({
+      capabilities: buildCapabilityLine({
+        llm: llmAvailable,
+        ...(this.capabilityFlags || {}),
+      }),
+    });
   },
 
   async ensureSession() {
@@ -472,8 +518,20 @@ export default {
       }
       return;
     }
-    // A model request cannot be cancelled; keep the turn busy until it settles.
     if (this.promptInFlight) {
+      // A remote request *can* be cancelled -- `RequestTask.abort()` -- and
+      // leaving Parar inert during one strands the wearer on "Pensando…" for
+      // the full 12-second timeout with no way out. Invalidate the turn first
+      // so the reply is discarded even if it lands anyway, then abort.
+      if (this.remote && this.remote.isConfigured()) {
+        this.activeTurnId += 1;
+        this.promptInFlight = false;
+        this.remote.abort();
+        this.setData({ isBusy: false, status: COPY.idle });
+        return;
+      }
+      // The host session exposes no cancellation, so a turn on that path still
+      // has to run to completion.
       return;
     }
     this.setData({ isBusy: false, status: COPY.idle });
@@ -489,28 +547,70 @@ export default {
   // question should get an answer from somewhere rather than an error where the
   // answer was. The cost is a second round trip on the slow path, which is the
   // right trade when the alternative is silence.
-  async requestReply(prompt) {
-    if (this.remote && this.remote.isConfigured()) {
-      try {
-        const { fala, tela } = await this.remote.complete({
-          system: getSystemPrompt(),
+  async requestReply(prompt, turnId) {
+    // Checked before the configuration shortcut, not after. `isConfigured()` is
+    // false both when no key was ever set and when reading device storage
+    // throws, and the second is a failure the wearer needs told. Letting an
+    // unconfigured build skip straight to the host would defeat the flag in the
+    // one case it was added for: the flag exists to stop a host answer standing
+    // in for a remote one, and "no key resolved" is exactly that substitution.
+    if (!(this.remote && this.remote.isConfigured())) {
+      if (REMOTE_REQUIRED) {
+        return this.afterRemoteFailure(
           prompt,
-          screenLimit: MAX_HUD_CHARS,
-        });
-        if (fala) {
-          return { fala, tela, source: 'GROQ' };
-        }
-        // An empty reply is a failure that did not throw. Falling through is
-        // better than speaking nothing.
-        return { ...(await this.hostReply(prompt)), remoteError: 'Modelo remoto devolveu vazio.' };
-      } catch (error) {
-        return {
-          ...(await this.hostReply(prompt)),
-          remoteError: getErrorMessage(error),
-        };
+          'Modelo remoto exigido, mas nenhuma chave foi resolvida.',
+          turnId,
+        );
       }
+      return this.hostReply(prompt);
     }
-    return this.hostReply(prompt);
+
+    try {
+      const { fala, tela } = await this.remote.complete({
+        system: getSystemPrompt(),
+        prompt,
+        screenLimit: MAX_HUD_CHARS,
+      });
+      if (fala) {
+        return { fala, tela, source: 'REMOTO' };
+      }
+      // An empty reply is a failure that did not throw.
+      return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.', turnId);
+    } catch (error) {
+      return this.afterRemoteFailure(prompt, getErrorMessage(error), turnId);
+    }
+  },
+
+  // With REMOTE_REQUIRED the failure *is* the answer, and the wearer hears it.
+  // That is deliberately worse for a wearer and better for whoever is debugging:
+  // a silent fallback makes a broken remote path indistinguishable from a
+  // working host-only one, and once the remote model is the only one that can do
+  // the job -- reaching an external API, say -- a host answer is not a
+  // consolation, it is a wrong answer that looks right.
+  async afterRemoteFailure(prompt, message, turnId) {
+    // Parar aborts the request, and an abort rejects exactly like a network
+    // failure -- so without this the cancelled turn would start a *host* call
+    // on its way out. `answerPrompt` discards the stale result, which hides the
+    // cost rather than avoiding it: the host session still spends a turn, and a
+    // turn the wearer opened meanwhile interleaves with it on the same session,
+    // corrupting multi-turn context. Cancelling has to end the work, not
+    // redirect it.
+    if (turnId != null && !this.isTurnCurrent(turnId)) {
+      return { fala: '', tela: '', source: '' };
+    }
+    if (REMOTE_REQUIRED) {
+      return { fala: message, tela: message, source: 'ERRO', remoteError: message };
+    }
+    try {
+      return { ...(await this.hostReply(prompt)), remoteError: message };
+    } catch (hostError) {
+      // Both paths are down, and the remote diagnostic is the one worth having:
+      // letting this throw would surface only the host's error, hiding the
+      // reason the remote call failed -- which is the single thing this whole
+      // change exists to expose. Rethrowing a combined message keeps the outer
+      // handler's behaviour and loses neither half.
+      throw new Error(`${message} (host também falhou: ${getErrorMessage(hostError)})`);
+    }
   },
 
   async hostReply(prompt) {
@@ -542,7 +642,7 @@ export default {
     });
 
     try {
-      const { fala, tela, source, remoteError } = await this.requestReply(prompt);
+      const { fala, tela, source, remoteError } = await this.requestReply(prompt, currentTurnId);
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
       }
@@ -642,7 +742,7 @@ export default {
 
     <view class="meta">
       <text class="meta-line">Host: {{hostLanguage}} · {{hostIsPortuguese ? 'compatível com pt' : 'não é pt'}}</text>
-      <text class="meta-line">LLM {{llmAvailable}} · ASR {{asrAvailable}} · TTS {{ttsAvailable}} · REMOTO {{remoteAvailable}}</text>
+      <text class="meta-line">{{capabilities}}</text>
     </view>
 
     <view class="status-row">

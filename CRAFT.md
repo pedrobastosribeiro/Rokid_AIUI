@@ -27,10 +27,10 @@ Para **usar nos seus óculos** (sem loja):
 
 1. Studio Global: [https://aiui-global.rokid.com/](https://aiui-global.rokid.com/) — não use o site da China.
 2. Feche o aviso de load failure do agente novo; isso é esperado antes de vincular o projeto.
-3. No Craft, **vincule** este projeto ao agente **Axiom**, depois **Pack** e faça upload do `.aix`.
+3. No Craft, **vincule** este projeto ao agente **Mav**, depois **Pack** e faça upload do `.aix`.
 4. Troque o **ícone padrão** (planeta azul). O guia oficial recusa o ícone default na revisão.
 5. Nos óculos: **Settings → Developer → AIUI → Update Glasses Resource Package**.
-6. Acorde o assistente e fale o nome **Axiom**.
+6. Acorde o assistente e fale o nome **Mav**.
 
 O `AGENTS.md` precisa ser `# Agent Manifest` + `## Identity` + **Name** — é o formato que o Studio valida no pacote. `# Agent: …` no título não basta.
 
