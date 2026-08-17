@@ -255,6 +255,11 @@ test('CI runs on push and skips the generated publish branches', () => {
   const trigger = workflow.slice(0, workflow.indexOf('concurrency:'));
   assert.match(trigger, /^\s*push:/m);
   assert.match(trigger, /^\s*pull_request:/m);
+  // `synchronize` must stay out: `push` already covers a new commit on an open
+  // PR, and subscribing to both put two runs on one commit -- the concurrency
+  // group then cancelled one, leaving cancelled checks on the pull request that
+  // read as failures at a glance.
+  assert.doesNotMatch(trigger, /- synchronize/);
   assert.match(trigger, /branches-ignore:/);
   for (const branch of ['pt-br', 'pt-br-preview']) {
     assert.match(trigger, new RegExp(`^\\s*- ${branch}$`, 'm'), `${branch} must be excluded`);

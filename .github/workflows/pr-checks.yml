@@ -18,7 +18,17 @@ on:
       # every commit.
       - pt-br
       - pt-br-preview
+  # Deliberately not `synchronize`. That is the "new commit pushed to an open
+  # PR" event, which `push` above already covers -- subscribing to both put two
+  # runs on one commit, and the concurrency group then cancelled one, leaving
+  # cancelled checks on the pull request that read as failures at a glance. The
+  # types kept here are the ones no push accompanies: a PR opened or reopened on
+  # a commit that was pushed earlier, or a draft marked ready.
   pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
   workflow_dispatch:
   # Callable so the publish workflow gates on these same checks instead of
   # running in parallel with them. See publish-create-aiui-agent.yml.
