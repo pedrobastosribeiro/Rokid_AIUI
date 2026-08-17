@@ -505,3 +505,18 @@ test('Parar aborts a remote request instead of waiting out the timeout', () => {
   assert.match(stop[0], /this\.remote\.abort\(\)/);
   assert.match(stop[0], /this\.activeTurnId \+= 1/);
 });
+
+test('a cancelled turn does not start a host call on its way out', () => {
+  // Parar aborts the remote request, and an abort rejects exactly like a
+  // network failure. Without a turn check the cancelled turn would fall through
+  // to the host model: `answerPrompt` discards the result, which hides the cost
+  // rather than avoiding it -- the host session still spends a turn, and a turn
+  // opened meanwhile interleaves with it on the same session.
+  assert.match(inkSource, /requestReply\(prompt, currentTurnId\)/);
+  assert.match(inkSource, /async afterRemoteFailure\(prompt, message, turnId\)/);
+  const guard = inkSource.match(
+    /async afterRemoteFailure\(prompt, message, turnId\) \{([\s\S]*?)if \(REMOTE_REQUIRED\)/,
+  );
+  assert.ok(guard, 'expected a staleness guard before the REMOTE_REQUIRED branch');
+  assert.match(guard[1], /!this\.isTurnCurrent\(turnId\)/);
+});

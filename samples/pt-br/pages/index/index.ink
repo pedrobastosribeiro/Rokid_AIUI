@@ -547,7 +547,7 @@ export default {
   // question should get an answer from somewhere rather than an error where the
   // answer was. The cost is a second round trip on the slow path, which is the
   // right trade when the alternative is silence.
-  async requestReply(prompt) {
+  async requestReply(prompt, turnId) {
     // Checked before the configuration shortcut, not after. `isConfigured()` is
     // false both when no key was ever set and when reading device storage
     // throws, and the second is a failure the wearer needs told. Letting an
@@ -556,7 +556,11 @@ export default {
     // in for a remote one, and "no key resolved" is exactly that substitution.
     if (!(this.remote && this.remote.isConfigured())) {
       if (REMOTE_REQUIRED) {
-        return this.afterRemoteFailure(prompt, 'Modelo remoto exigido, mas nenhuma chave foi resolvida.');
+        return this.afterRemoteFailure(
+          prompt,
+          'Modelo remoto exigido, mas nenhuma chave foi resolvida.',
+          turnId,
+        );
       }
       return this.hostReply(prompt);
     }
@@ -571,9 +575,9 @@ export default {
         return { fala, tela, source: 'REMOTO' };
       }
       // An empty reply is a failure that did not throw.
-      return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.');
+      return this.afterRemoteFailure(prompt, 'Modelo remoto devolveu vazio.', turnId);
     } catch (error) {
-      return this.afterRemoteFailure(prompt, getErrorMessage(error));
+      return this.afterRemoteFailure(prompt, getErrorMessage(error), turnId);
     }
   },
 
@@ -583,7 +587,17 @@ export default {
   // working host-only one, and once the remote model is the only one that can do
   // the job -- reaching an external API, say -- a host answer is not a
   // consolation, it is a wrong answer that looks right.
-  async afterRemoteFailure(prompt, message) {
+  async afterRemoteFailure(prompt, message, turnId) {
+    // Parar aborts the request, and an abort rejects exactly like a network
+    // failure -- so without this the cancelled turn would start a *host* call
+    // on its way out. `answerPrompt` discards the stale result, which hides the
+    // cost rather than avoiding it: the host session still spends a turn, and a
+    // turn the wearer opened meanwhile interleaves with it on the same session,
+    // corrupting multi-turn context. Cancelling has to end the work, not
+    // redirect it.
+    if (turnId != null && !this.isTurnCurrent(turnId)) {
+      return { fala: '', tela: '', source: '' };
+    }
     if (REMOTE_REQUIRED) {
       return { fala: message, tela: message, source: 'ERRO', remoteError: message };
     }
@@ -628,7 +642,7 @@ export default {
     });
 
     try {
-      const { fala, tela, source, remoteError } = await this.requestReply(prompt);
+      const { fala, tela, source, remoteError } = await this.requestReply(prompt, currentTurnId);
       if (!this.isTurnCurrent(currentTurnId)) {
         return;
       }

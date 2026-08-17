@@ -45,7 +45,12 @@ export function clampSpeech(value, limit = MAX_SPEECH_CHARS) {
 
   const window = text.slice(0, limit);
   let lastEnd = -1;
-  const terminators = /[.!?…]/g;
+  // The terminator must be followed by whitespace or the end of the window.
+  // Without that, "cinco vírgula 42" written as "5.42" -- or a time, or a
+  // version number -- offers a period mid-token, and the cut lands inside the
+  // number: the wearer hears "o dólar está a cinco" and the rest is gone. A
+  // real sentence end is always followed by a space or nothing.
+  const terminators = /[.!?…](?=\s|$)/g;
   let match = terminators.exec(window);
   while (match !== null) {
     lastEnd = match.index + 1;

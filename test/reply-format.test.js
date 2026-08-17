@@ -265,3 +265,23 @@ test('CI runs on push and skips the generated publish branches', () => {
   const concurrency = workflow.slice(workflow.indexOf('concurrency:'));
   assert.match(concurrency, /pull_request\.head\.ref \|\| github\.ref_name/);
 });
+
+test('a decimal point is not a sentence end', () => {
+  // "5.42" offers a period mid-token. Cutting there speaks "o dólar está a
+  // cinco." and drops the rest -- worse than any mid-sentence cut, because the
+  // number that was the answer is now wrong rather than merely incomplete.
+  const text = 'O dólar está a 5.42 reais hoje e deve subir um pouco mais até o fim da semana';
+  const clamped = clampSpeech(text, 45);
+  assert.doesNotMatch(clamped, /5\.$/, `cut inside the number: ${clamped}`);
+  assert.ok(clamped.length <= 45);
+});
+
+test('times and version numbers survive the clamp', () => {
+  for (const text of [
+    'A reunião começa às 14.30 e termina bem mais tarde do que estava planejado',
+    'A versão 0.14.0 é a exigida pelo runtime atual dos óculos e não pode mudar',
+  ]) {
+    const clamped = clampSpeech(text, 40);
+    assert.doesNotMatch(clamped, /\d\.$/, `cut inside a number: ${clamped}`);
+  }
+});
