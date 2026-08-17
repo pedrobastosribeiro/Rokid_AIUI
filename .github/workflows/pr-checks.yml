@@ -1,18 +1,46 @@
 name: PR Checks
 
 on:
-  pull_request:
+  # Both `push` and `pull_request`, because either one alone has failed here.
+  #
+  # `pull_request` stopped being delivered for #19: no run on open, and none on
+  # any of four subsequent pushes, while `workflow_dispatch` on the same branch
+  # worked every time. The cause is upstream of this file -- the trigger block
+  # was already unfiltered -- so the answer is redundancy rather than a fix.
+  # Check runs attach to the head commit, not to the event that produced them,
+  # so a push-triggered run populates a pull request's checks identically;
+  # verified on #19, where dispatched runs show up as its three checks.
   push:
-    branches:
-      - main
+    branches-ignore:
+      # Generated publish branches. Their root is the sample, not the repo, so
+      # there is no validator to run there at all -- and `pt-br` is force-pushed
+      # on every push to `main`, which would add a second, always-failing run to
+      # every commit.
+      - pt-br
+      - pt-br-preview
+  # Deliberately not `synchronize`. That is the "new commit pushed to an open
+  # PR" event, which `push` above already covers -- subscribing to both put two
+  # runs on one commit, and the concurrency group then cancelled one, leaving
+  # cancelled checks on the pull request that read as failures at a glance. The
+  # types kept here are the ones no push accompanies: a PR opened or reopened on
+  # a commit that was pushed earlier, or a draft marked ready.
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
   workflow_dispatch:
   # Callable so the publish workflow gates on these same checks instead of
   # running in parallel with them. See publish-create-aiui-agent.yml.
   workflow_call:
 
-# A new push to a PR makes the in-flight run obsolete.
+# A new push makes the in-flight run obsolete. Keyed on the branch rather than
+# on `github.ref`, because those differ between the two triggers above --
+# `refs/heads/<branch>` for a push, `refs/pull/N/merge` for a pull request --
+# and ungrouped they would run the same commit twice instead of one superseding
+# the other.
 concurrency:
-  group: pr-checks-${{ github.workflow }}-${{ github.ref }}
+  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -41,6 +69,15 @@ jobs:
 
       - name: Sample pages and components resolve
         run: node scripts/ci/validate.mjs samples
+
+      # This job names each check explicitly rather than running the whole
+      # validator, so a check added to validate.mjs does not run here until it
+      # is also added above. `secrets` spent a day in that gap -- the one check
+      # whose entire job is to stop a provider key reaching a public repository,
+      # and the only backstop that covers a commit authored in the GitHub web
+      # UI, where nothing local ever runs.
+      - name: No provider keys in tracked files
+        run: node scripts/ci/validate.mjs secrets
 
       - name: Markdown links resolve
         run: node scripts/ci/validate.mjs links

@@ -79,7 +79,7 @@ test('keeps HUD copy in Portuguese', () => {
     assert.equal(typeof value, 'string', key);
     assert.ok(value.trim().length > 0, key);
   }
-  assert.match(COPY.title, /Axiom/);
+  assert.match(COPY.title, /Mav/);
   assert.match(COPY.greeting, /português/);
   assert.match(COPY.speakHint, /português brasileiro/);
 });
@@ -392,8 +392,8 @@ test('the agent has a name of its own, distinct from the hardware', () => {
   // glasses specifications instead of routing here, and pt-BR ASR transcribed
   // it as "Rocket" about as often as "Rokid". A name the hardware does not
   // already own is what makes the agent addressable.
-  assert.match(COPY.title, /Axiom/);
-  assert.match(getSystemPrompt(), /Seu nome é Axiom/);
+  assert.match(COPY.title, /Mav/);
+  assert.match(getSystemPrompt(), /Seu nome é Mav/);
   assert.doesNotMatch(COPY.title, /Rokid/);
 
   const manifest = readFileSync(
@@ -402,8 +402,8 @@ test('the agent has a name of its own, distinct from the hardware', () => {
   );
   // The Identity Name is the field AIUI Studio validates on upload, so it is
   // the one that has to carry the new name, not just the HUD copy.
-  assert.match(manifest, /- \*\*Name\*\*: Axiom/);
-  assert.match(manifest, /Seu nome é Axiom/);
+  assert.match(manifest, /- \*\*Name\*\*: Mav/);
+  assert.match(manifest, /Seu nome é Mav/);
 });
 
 test('the agent understands other languages but answers only in pt-BR', () => {
@@ -426,4 +426,97 @@ test('the agent understands other languages but answers only in pt-BR', () => {
   );
   assert.match(manifest, /Entenda o usuário em qualquer idioma/);
   assert.match(manifest, /inglês mal transcrito/);
+});
+
+test('the status line stays short enough not to wrap', () => {
+  // `.meta` is flex-shrink: 0, so a wrapped status line grows the chrome and
+  // takes the height out of the panels below -- which is how a status line ends
+  // up overlapping the content it sits above. Four spelled-out booleans ran ~44
+  // characters; this has to stay well under what fits on one 11px line.
+  const line = inkSource.match(/return `LLM \$\{flag\(llm\)\}[^`]*`/);
+  assert.ok(line, 'expected buildCapabilityLine to build the status line');
+  const rendered = line[0]
+    .replace(/^return `/, '')
+    .replace(/`$/, '')
+    .replace(/\$\{flag\([a-z]+\)\}/g, '+');
+  assert.ok(rendered.length <= 32, `status line is ${rendered.length} chars: ${rendered}`);
+  assert.match(rendered, /REMOTO/);
+});
+
+test('REMOTE_REQUIRED turns a remote failure into the answer', () => {
+  // Falling back to the host is right for a wearer and wrong while debugging,
+  // and actively misleading once the remote model is the only one that can do
+  // the job -- reaching an external API, say -- because a host answer then looks
+  // like success. The flag has to reach the page, not just exist in secrets.
+  assert.match(inkSource, /import \{ REMOTE_REQUIRED \}/);
+  assert.match(inkSource, /if \(REMOTE_REQUIRED\)/);
+  assert.match(inkSource, /source: 'ERRO'/);
+});
+
+test('the status line is rebuilt from instance state, not from data', () => {
+  // refreshAvailability() rebuilds the line after LanguageModel.availability()
+  // resolves. Reading the other three flags back out of `this.data` would make
+  // that rebuild depend on a preceding setData() having already applied, and
+  // nothing documents setData as synchronous. A stale read prints "ASR - TTS -
+  // REMOTO -" on a device where all three work -- the exact lie the line was
+  // added to prevent, in the one place someone would trust it.
+  assert.match(inkSource, /this\.capabilityFlags = \{/);
+  const rebuild = inkSource.match(/capabilities: buildCapabilityLine\(\{\s*llm: llmAvailable,[\s\S]{0,160}?\}\)/);
+  assert.ok(rebuild, 'expected refreshAvailability to rebuild the capability line');
+  assert.doesNotMatch(rebuild[0], /this\.data\./, 'the rebuild must not read back through data');
+});
+
+test('the reply source names the path, not a provider', () => {
+  // REMOTE_BASE_URL and REMOTE_MODEL can point at any OpenAI-compatible
+  // endpoint, so a 'GROQ' label would assert a fact the page cannot know. A
+  // status field that states something unverified is the exact failure this
+  // field was added to prevent, so the label has to stay provider-neutral.
+  assert.match(inkSource, /source: 'REMOTO'/);
+  assert.doesNotMatch(inkSource, /source: 'GROQ'/);
+  assert.doesNotMatch(inkSource, /'GROQ' or 'HOST'/);
+});
+
+test('REMOTE_REQUIRED is enforced before the configuration shortcut', () => {
+  // `isConfigured()` is false both when no key was ever set and when reading
+  // device storage throws. Checking it first and returning a host answer would
+  // defeat the flag in the one case it was added for -- the flag exists to stop
+  // a host answer standing in for a remote one, and "no key resolved" is
+  // exactly that substitution.
+  const guard = inkSource.match(
+    /if \(!\(this\.remote && this\.remote\.isConfigured\(\)\)\) \{([\s\S]*?)\n {4}\}/,
+  );
+  assert.ok(guard, 'expected an unconfigured branch in requestReply');
+  assert.match(guard[1], /REMOTE_REQUIRED/, 'the unconfigured branch must honour the flag');
+  assert.match(guard[1], /afterRemoteFailure/);
+});
+
+test('a remote failure survives a host fallback that also fails', () => {
+  // Letting the host error propagate alone would hide the remote diagnostic --
+  // the single thing REMOTE_REQUIRED and the source label were added to expose.
+  assert.match(inkSource, /host também falhou/);
+});
+
+test('Parar aborts a remote request instead of waiting out the timeout', () => {
+  // RequestTask.abort() exists, so leaving Parar inert strands the wearer on
+  // "Pensando…" for the full timeout with no way out. The turn is invalidated
+  // first so a reply that lands anyway is discarded rather than spoken over.
+  const stop = inkSource.match(/stopTalk\(\) \{[\s\S]*?\n {2}\},/);
+  assert.ok(stop, 'expected stopTalk');
+  assert.match(stop[0], /this\.remote\.abort\(\)/);
+  assert.match(stop[0], /this\.activeTurnId \+= 1/);
+});
+
+test('a cancelled turn does not start a host call on its way out', () => {
+  // Parar aborts the remote request, and an abort rejects exactly like a
+  // network failure. Without a turn check the cancelled turn would fall through
+  // to the host model: `answerPrompt` discards the result, which hides the cost
+  // rather than avoiding it -- the host session still spends a turn, and a turn
+  // opened meanwhile interleaves with it on the same session.
+  assert.match(inkSource, /requestReply\(prompt, currentTurnId\)/);
+  assert.match(inkSource, /async afterRemoteFailure\(prompt, message, turnId\)/);
+  const guard = inkSource.match(
+    /async afterRemoteFailure\(prompt, message, turnId\) \{([\s\S]*?)if \(REMOTE_REQUIRED\)/,
+  );
+  assert.ok(guard, 'expected a staleness guard before the REMOTE_REQUIRED branch');
+  assert.match(guard[1], /!this\.isTurnCurrent\(turnId\)/);
 });
