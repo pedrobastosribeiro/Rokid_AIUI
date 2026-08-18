@@ -93,7 +93,13 @@ jobs:
     #     this run is the sole coverage;
     #   * it is also the more authoritative of the two -- it checks the merge
     #     result, which is the tree that lands.
-    name: "Validate${{ github.event_name != 'pull_request' && ' (branch tip)' || '' }}"
+    #
+    # Tested for `push` specifically, not `!= 'pull_request'`. A dispatched run
+    # is the documented fallback for `pull_request` delivery failing, as it did
+    # on #19, and its checks attach to the pull request the same way. Suffixing
+    # it would leave the fallback unable to satisfy a bare required context --
+    # blocking the pull request it exists to unblock.
+    name: "Validate${{ github.event_name == 'push' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -134,7 +140,7 @@ jobs:
         run: node scripts/ci/validate.mjs tests
 
   pack:
-    name: "Pack every sample${{ github.event_name != 'pull_request' && ' (branch tip)' || '' }}"
+    name: "Pack every sample${{ github.event_name == 'push' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -151,7 +157,7 @@ jobs:
         run: node scripts/ci/validate.mjs pack
 
   scaffold:
-    name: "Scaffold a project from the packed package${{ github.event_name != 'pull_request' && ' (branch tip)' || '' }}"
+    name: "Scaffold a project from the packed package${{ github.event_name == 'push' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

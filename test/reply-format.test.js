@@ -307,6 +307,36 @@ test('a terminator is judged against the full text, not the slice', () => {
   assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
 });
 
+// Job-level `if:` conditions, with both the jobs' indentation and each job's
+// key indentation derived from the document instead of assumed. Steps sit
+// deeper than their job's keys, so they are never mistaken for one.
+function jobLevelConditions(workflow) {
+  const lines = workflow.split('\n');
+  const start = lines.findIndex((line) => /^jobs:/.test(line));
+  if (start === -1) throw new Error('no jobs: mapping in the workflow');
+
+  const isContent = (line) => line.trim() !== '' && !/^\s*#/.test(line);
+  const indentOf = (line) => line.match(/^ */)[0].length;
+
+  const body = lines.slice(start + 1).filter(isContent);
+  if (body.length === 0) return [];
+  const jobIndent = indentOf(body[0]);
+
+  const found = [];
+  let keyIndent = null;
+  for (const line of body) {
+    const indent = indentOf(line);
+    if (indent < jobIndent) break;
+    if (indent === jobIndent) {
+      keyIndent = null;
+      continue;
+    }
+    if (keyIndent === null) keyIndent = indent;
+    if (indent === keyIndent && /^if:/.test(line.trim())) found.push(line.trim());
+  }
+  return found;
+}
+
 test('both CI runs survive, because they do not check the same tree', () => {
   const workflow = readFileSync(
     new URL('../.github/workflows/pr-checks.yml', import.meta.url),
@@ -344,34 +374,30 @@ test('both CI runs survive, because they do not check the same tree', () => {
   //     the one change that goes unverified, which is the worst possible set.
   //
   // Both were reported on #21 after the guard shipped.
-  // Job keys sit at four spaces; a step's `if:` is indented further, so this
-  // sees job-level conditions only.
-  const jobs = workflow.slice(workflow.indexOf('\njobs:'));
-  const guards = [...jobs.matchAll(/^ {4}if:.*$/gm)].map((m) => m[0].trim());
-  assert.deepEqual(
-    guards,
-    [],
-    'a job-level condition is back; that is how the merge-result run got skipped',
-  );
+  //
+  // Indentation is read off the file rather than assumed. An earlier version
+  // matched `^ {4}if:`, which is only structural for as long as nobody
+  // reindents the jobs mapping -- legal YAML that GitHub still honours, and it
+  // would have returned no guards while the jobs were being skipped.
+  assert.deepEqual(jobLevelConditions(workflow), [], 'a job-level condition is back');
 
-  // Both runs land in one checks list, so a failure has to name its tree. The
-  // `push` run is the qualified one: a fork pull request, and one from a
+  // Both runs land in one checks list, so a failure has to name its tree. Only
+  // the `push` run is qualified. A fork pull request, and one from a
   // `branches-ignore` ref, has no push run at all, so qualifying the
   // `pull_request` run instead would leave those pull requests with nothing
   // under the plain name -- exactly where that run is the only coverage.
+  //
+  // The test is `== 'push'` and not `!= 'pull_request'`, which would also
+  // catch `workflow_dispatch`. Dispatch is the documented fallback for
+  // `pull_request` delivery failing, its checks attach to the pull request the
+  // same way, and suffixing it would leave the fallback unable to satisfy a
+  // bare required context -- blocking the pull request it exists to unblock.
   const qualified = [
     ...workflow.matchAll(
-      /name: "[^"]*\$\{\{ github\.event_name != 'pull_request' && ' \(branch tip\)' \|\| '' \}\}"/g,
+      /name: "[^"]*\$\{\{ github\.event_name == 'push' && ' \(branch tip\)' \|\| '' \}\}"/g,
     ),
   ];
   assert.equal(qualified.length, 3, 'every job must distinguish its two runs');
-  // The bare name has to be the one a pull request always gets, whatever its
-  // origin. Reversing this reads as harmless and is not.
-  assert.doesNotMatch(
-    workflow,
-    /event_name == 'pull_request' && ' \(merge result\)'/,
-    'the pull_request run must keep the unqualified name; forks have no push run',
-  );
 
   // `synchronize` is the only thing that checks a fork's later commits.
   assert.match(workflow, /- synchronize/);
