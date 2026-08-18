@@ -33,14 +33,19 @@ on:
   # Callable so the publish workflow gates on these same checks instead of
   # running in parallel with them. See publish-create-aiui-agent.yml.
   #
-  # Careful if you add another caller. Under `workflow_call` the `if:` on each
-  # job below reads `github.event_name` from the *caller's* event, not from this
-  # workflow. Today's only caller runs on push to `main`, so the guard passes and
-  # every job runs. A caller triggered by `pull_request` on a same-repo branch
-  # would make that guard false, skip all three jobs, and still satisfy its
-  # `needs: checks` -- publishing a release nothing verified. Verify a new caller
-  # actually runs the jobs rather than trusting the gate to be green.
+  # `run-always` exists because the job guards below read `github.event_name`,
+  # and under `workflow_call` that is the *caller's* event rather than this
+  # workflow's. A caller triggered by a same-repo `pull_request` would therefore
+  # match the duplicate-skipping condition, skip all three jobs, and still
+  # satisfy its `needs:` -- gating a release on checks that never ran. The
+  # default makes every caller opt in without knowing any of this; a caller that
+  # genuinely wants the skip behaviour has to ask for it.
   workflow_call:
+    inputs:
+      run-always:
+        description: Run the jobs regardless of the caller's event.
+        type: boolean
+        default: true
 
 # Grouped per event, per repository, per branch -- and the event is load-bearing.
 #
@@ -74,7 +79,12 @@ jobs:
     # this workflow through `push`. Running both is what created a pair for the
     # concurrency group to cancel, and a cancelled check reads as a failure. A
     # fork pull request has no such push here, so it still runs.
+    #
+    # `inputs.run-always` comes first because a caller invoking this workflow
+    # means to run it. Without that clause the guard would read the caller's
+    # event and could skip everything while still reporting a satisfied gate.
     if: >-
+      inputs.run-always ||
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
@@ -122,7 +132,12 @@ jobs:
     # this workflow through `push`. Running both is what created a pair for the
     # concurrency group to cancel, and a cancelled check reads as a failure. A
     # fork pull request has no such push here, so it still runs.
+    #
+    # `inputs.run-always` comes first because a caller invoking this workflow
+    # means to run it. Without that clause the guard would read the caller's
+    # event and could skip everything while still reporting a satisfied gate.
     if: >-
+      inputs.run-always ||
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
@@ -146,7 +161,12 @@ jobs:
     # this workflow through `push`. Running both is what created a pair for the
     # concurrency group to cancel, and a cancelled check reads as a failure. A
     # fork pull request has no such push here, so it still runs.
+    #
+    # `inputs.run-always` comes first because a caller invoking this workflow
+    # means to run it. Without that clause the guard would read the caller's
+    # event and could skip everything while still reporting a satisfied gate.
     if: >-
+      inputs.run-always ||
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest

@@ -319,10 +319,17 @@ test('CI runs each commit once, so a cancelled check means superseded', () => {
   const parsed = workflow.replace(/\s+/g, ' ');
   const guards = [
     ...parsed.matchAll(
-      /github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name != github\.repository/g,
+      /inputs\.run-always \|\| github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name != github\.repository/g,
     ),
   ];
   assert.equal(guards.length, 3, 'every job must carry the guard, or one job duplicates');
+
+  // `inputs.run-always` has to lead. Under `workflow_call` the rest of the
+  // guard reads the *caller's* event, so a caller triggered by a same-repo
+  // pull request would skip every job and still report a satisfied gate --
+  // publishing a release on checks that never ran. The input defaults to true
+  // so a caller opts in without having to know any of that.
+  assert.match(parsed, /run-always: description: [^#]*type: boolean default: true/);
 
   // `synchronize` has to stay for the fork case the guard preserves.
   assert.match(workflow, /- synchronize/);
