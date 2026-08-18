@@ -81,10 +81,19 @@ permissions:
 jobs:
   validate:
     # Both runs land in the same checks list, so the name has to say which tree
-    # failed. The suffix is conditional rather than unconditional so the `push`
-    # run's check keeps the exact name it has today -- anything configured
-    # elsewhere against "Validate" goes on being satisfied by it.
-    name: "Validate${{ github.event_name == 'pull_request' && ' (merge result)' || '' }}"
+    # failed. The `pull_request` run keeps the bare name and the `push` run is
+    # the one qualified, which is the opposite of what it looks like it should
+    # be. Two reasons, and the first is the load-bearing one:
+    #
+    #   * the `pull_request` run is the only one every pull request has. A fork
+    #     never pushes here, and a branch under `branches-ignore` gets no push
+    #     run either. Qualifying that run instead would leave exactly those
+    #     pull requests with no check under the plain name, so anything
+    #     configured against "Validate" would go unsatisfied precisely where
+    #     this run is the sole coverage;
+    #   * it is also the more authoritative of the two -- it checks the merge
+    #     result, which is the tree that lands.
+    name: "Validate${{ github.event_name != 'pull_request' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -125,7 +134,7 @@ jobs:
         run: node scripts/ci/validate.mjs tests
 
   pack:
-    name: "Pack every sample${{ github.event_name == 'pull_request' && ' (merge result)' || '' }}"
+    name: "Pack every sample${{ github.event_name != 'pull_request' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -142,7 +151,7 @@ jobs:
         run: node scripts/ci/validate.mjs pack
 
   scaffold:
-    name: "Scaffold a project from the packed package${{ github.event_name == 'pull_request' && ' (merge result)' || '' }}"
+    name: "Scaffold a project from the packed package${{ github.event_name != 'pull_request' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

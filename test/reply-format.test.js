@@ -345,13 +345,23 @@ test('both CI runs survive, because they do not check the same tree', () => {
   );
 
   // Both runs land in one checks list, so a failure has to name its tree. The
-  // suffix is conditional so the push run's check name is unchanged.
-  const suffixes = [
+  // `push` run is the qualified one: a fork pull request, and one from a
+  // `branches-ignore` ref, has no push run at all, so qualifying the
+  // `pull_request` run instead would leave those pull requests with nothing
+  // under the plain name -- exactly where that run is the only coverage.
+  const qualified = [
     ...workflow.matchAll(
-      /name: "[^"]*\$\{\{ github\.event_name == 'pull_request' && ' \(merge result\)' \|\| '' \}\}"/g,
+      /name: "[^"]*\$\{\{ github\.event_name != 'pull_request' && ' \(branch tip\)' \|\| '' \}\}"/g,
     ),
   ];
-  assert.equal(suffixes.length, 3, 'every job must distinguish its two runs');
+  assert.equal(qualified.length, 3, 'every job must distinguish its two runs');
+  // The bare name has to be the one a pull request always gets, whatever its
+  // origin. Reversing this reads as harmless and is not.
+  assert.doesNotMatch(
+    workflow,
+    /event_name == 'pull_request' && ' \(merge result\)'/,
+    'the pull_request run must keep the unqualified name; forks have no push run',
+  );
 
   // `synchronize` is the only thing that checks a fork's later commits.
   assert.match(workflow, /- synchronize/);
