@@ -259,16 +259,19 @@ test('CI runs on push and skips the generated publish branches', () => {
   // exists for branches in this repository: a fork contributor pushes to their
   // own fork, so the base repo sees no push, and without `synchronize` a fork
   // PR is checked once on `opened` while every later commit inherits that green
-  // tick unverified. The duplicate run on same-repo PRs is cosmetic; a stale
-  // pass on an unchecked commit is not.
+  // tick unverified. The overlapping run on same-repo pull requests is kept on
+  // purpose -- it checks the merge commit rather than the branch tip.
   assert.match(trigger, /- synchronize/);
   assert.match(trigger, /branches-ignore:/);
   for (const branch of ['pt-br', 'pt-br-preview']) {
     assert.match(trigger, new RegExp(`^\\s*- ${branch}$`, 'm'), `${branch} must be excluded`);
   }
 
-  // Both triggers must land in one concurrency group, or the same commit runs
-  // twice rather than one superseding the other.
+  // The branch is part of the concurrency key under either trigger, which need
+  // different expressions to name it. Whether the two triggers *share* a group
+  // is a separate question, and the answer is no -- see the test below. This
+  // file used to assert the opposite here, in a comment, while checking
+  // something that passed either way.
   const concurrency = workflow.slice(workflow.indexOf('concurrency:'));
   assert.match(concurrency, /pull_request\.head\.ref \|\| github\.ref_name/);
 });
@@ -325,9 +328,12 @@ test('both CI runs survive, because they do not check the same tree', () => {
   // Within one event, superseding an older commit is still the right behaviour.
   assert.match(group, /cancel-in-progress: true/);
 
-  // No job may skip itself for being a same-repo pull request. That guard was
-  // tried and reverted: the `push` run is not a substitute for the
-  // `pull_request` run, on two counts.
+  // No job may carry a job-level condition at all. The invariant is structural
+  // rather than textual: the guard this pins down can be written `A != B` or
+  // `!(A == B)`, with the operands either way round, or split across lines, and
+  // a regex for any one spelling passes while the merge-result jobs are skipped
+  // again. A guard was tried and reverted, because the `push` run is not a
+  // substitute for the `pull_request` run, on two counts.
   //
   //  1. `pull_request` checks out the synthetic merge commit; `push` checks out
   //     the branch tip. A branch behind its base can pass at the tip and fail
@@ -338,10 +344,14 @@ test('both CI runs survive, because they do not check the same tree', () => {
   //     the one change that goes unverified, which is the worst possible set.
   //
   // Both were reported on #21 after the guard shipped.
-  assert.doesNotMatch(
-    workflow,
-    /full_name != github\.repository/,
-    'a same-repo skip guard is back; it leaves the merge result unverified',
+  // Job keys sit at four spaces; a step's `if:` is indented further, so this
+  // sees job-level conditions only.
+  const jobs = workflow.slice(workflow.indexOf('\njobs:'));
+  const guards = [...jobs.matchAll(/^ {4}if:.*$/gm)].map((m) => m[0].trim());
+  assert.deepEqual(
+    guards,
+    [],
+    'a job-level condition is back; that is how the merge-result run got skipped',
   );
 
   // Both runs land in one checks list, so a failure has to name its tree. The
