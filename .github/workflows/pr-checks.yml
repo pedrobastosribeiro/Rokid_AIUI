@@ -32,6 +32,14 @@ on:
   workflow_dispatch:
   # Callable so the publish workflow gates on these same checks instead of
   # running in parallel with them. See publish-create-aiui-agent.yml.
+  #
+  # Careful if you add another caller. Under `workflow_call` the `if:` on each
+  # job below reads `github.event_name` from the *caller's* event, not from this
+  # workflow. Today's only caller runs on push to `main`, so the guard passes and
+  # every job runs. A caller triggered by `pull_request` on a same-repo branch
+  # would make that guard false, skip all three jobs, and still satisfy its
+  # `needs: checks` -- publishing a release nothing verified. Verify a new caller
+  # actually runs the jobs rather than trusting the gate to be green.
   workflow_call:
 
 # Grouped per event, per repository, per branch -- and the event is load-bearing.
