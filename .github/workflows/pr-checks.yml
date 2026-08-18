@@ -18,17 +18,23 @@ on:
       # every commit.
       - pt-br
       - pt-br-preview
-  # Deliberately not `synchronize`. That is the "new commit pushed to an open
-  # PR" event, which `push` above already covers -- subscribing to both put two
-  # runs on one commit, and the concurrency group then cancelled one, leaving
-  # cancelled checks on the pull request that read as failures at a glance. The
-  # types kept here are the ones no push accompanies: a PR opened or reopened on
-  # a commit that was pushed earlier, or a draft marked ready.
+  # `synchronize` is kept even though `push` overlaps it, and the overlap is a
+  # deliberate cost rather than an oversight.
+  #
+  # `push` only covers a new commit on an open PR when the branch lives in this
+  # repository. A fork contributor pushes to their own fork, so the base repo
+  # sees no push at all -- drop `synchronize` and a fork PR is checked once, on
+  # `opened`, and every later commit inherits that green tick without being
+  # verified. A stale pass on an unverified commit is a correctness problem; the
+  # duplicate run this causes on same-repo PRs, where the concurrency group
+  # cancels one of the pair, is cosmetic noise on the checks list. Taking the
+  # noise is the cheaper mistake.
   pull_request:
     types:
       - opened
       - reopened
       - ready_for_review
+      - synchronize
   workflow_dispatch:
   # Callable so the publish workflow gates on these same checks instead of
   # running in parallel with them. See publish-create-aiui-agent.yml.

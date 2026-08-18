@@ -255,11 +255,13 @@ test('CI runs on push and skips the generated publish branches', () => {
   const trigger = workflow.slice(0, workflow.indexOf('concurrency:'));
   assert.match(trigger, /^\s*push:/m);
   assert.match(trigger, /^\s*pull_request:/m);
-  // `synchronize` must stay out: `push` already covers a new commit on an open
-  // PR, and subscribing to both put two runs on one commit -- the concurrency
-  // group then cancelled one, leaving cancelled checks on the pull request that
-  // read as failures at a glance.
-  assert.doesNotMatch(trigger, /- synchronize/);
+  // `synchronize` must stay in, despite overlapping `push`. That overlap only
+  // exists for branches in this repository: a fork contributor pushes to their
+  // own fork, so the base repo sees no push, and without `synchronize` a fork
+  // PR is checked once on `opened` while every later commit inherits that green
+  // tick unverified. The duplicate run on same-repo PRs is cosmetic; a stale
+  // pass on an unchecked commit is not.
+  assert.match(trigger, /- synchronize/);
   assert.match(trigger, /branches-ignore:/);
   for (const branch of ['pt-br', 'pt-br-preview']) {
     assert.match(trigger, new RegExp(`^\\s*- ${branch}$`, 'm'), `${branch} must be excluded`);
