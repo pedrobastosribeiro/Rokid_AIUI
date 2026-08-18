@@ -34,22 +34,24 @@ on:
   # running in parallel with them. See publish-create-aiui-agent.yml.
   workflow_call:
 
-# No duplicate to cancel, so cancellation goes back to meaning "this commit was
-# superseded" rather than "one of the pair lost a race".
+# Grouped per event, per repository, per branch -- and the event is load-bearing.
 #
-# The pairing was the whole problem. `cancel-in-progress: false` looked like the
-# fix and is not: GitHub cancels an existing *pending* run whenever another
-# member of the group is queued, whatever that setting says, so a third arrival
-# while one is still running still produced a cancelled check on a healthy
-# commit. The jobs below skip the `pull_request` event for same-repository pull
-# requests instead, which removes the second run rather than paying for it.
+# A job-level `if:` does not stop a workflow run from being created; it only
+# skips the jobs inside it. So the `pull_request` run for a same-repo commit
+# still joins the group, and with a shared key it cancelled the `push` run that
+# was doing the actual work before skipping its own jobs. Observed on this very
+# pull request: three cancelled, three skipped, the commit verified by nobody.
+# Keying on the event keeps those two runs from ever reaching for each other.
 #
-# The repository is part of the key because a branch name is not unique across
-# forks: two fork pull requests both opened from `main` must not share a group
-# and cancel each other.
+# Within one event, cancellation still means what it should: a newer commit
+# supersedes an older run on the same branch, and the cancelled check lands on
+# the commit that was superseded rather than on HEAD.
+#
+# The repository is in the key because a branch name is not unique across forks:
+# two fork pull requests both opened from `main` must not cancel each other.
 concurrency:
   group: >-
-    pr-checks-${{ github.workflow }}-${{
+    pr-checks-${{ github.workflow }}-${{ github.event_name }}-${{
       github.event.pull_request.head.repo.full_name || github.repository
     }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true

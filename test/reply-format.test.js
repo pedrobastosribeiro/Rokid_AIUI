@@ -326,7 +326,13 @@ test('CI runs each commit once, so a cancelled check means superseded', () => {
 
   // `synchronize` has to stay for the fork case the guard preserves.
   assert.match(workflow, /- synchronize/);
-  // The group still has to distinguish forks: two fork pull requests opened
-  // from `main` must not cancel each other.
-  assert.match(workflow, /head\.repo\.full_name \|\| github\.repository/);
+  // The concurrency key must separate the two events. A job-level `if:` does not
+  // stop the run from being created -- it only skips the jobs inside it -- so a
+  // shared key let the skipping `pull_request` run cancel the `push` run that
+  // was doing the work, leaving the commit verified by nobody. Observed once.
+  const group = workflow.slice(workflow.indexOf('concurrency:'));
+  assert.match(group, /github\.event_name/);
+  // And still distinguish forks: two fork pull requests opened from `main`
+  // must not cancel each other.
+  assert.match(group, /head\.repo\.full_name \|\| github\.repository/);
 });
