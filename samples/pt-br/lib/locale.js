@@ -327,14 +327,20 @@ export function applyPortugueseSpeech(utterance) {
   return utterance;
 }
 
-const MAX_ASR_CODE_CHARS = 32;
+// Budgeted from the whole composed message, not from the suffix alone. `.error`
+// is non-shrinking chrome whose height the page's 193px arithmetic never
+// counted -- it is conditional, and it appears exactly when the panels are
+// already full -- so a message that wraps to a second line takes that line from
+// the panels below, on a renderer that then does not clip their text. The fixed
+// sentence is ~46 characters, so this total keeps the pair on one line at 11px.
+const MAX_ASR_MESSAGE_CHARS = 72;
 
 // Flattened as well as truncated: a newline survives the character budget and
 // still costs a rendered line in an element that neither shrinks nor caps its
 // line count.
-function boundCode(code) {
+function boundCode(code, room) {
   const flat = String(code).replace(/\s+/g, ' ').trim();
-  return flat.length <= MAX_ASR_CODE_CHARS ? flat : `${flat.slice(0, MAX_ASR_CODE_CHARS - 1)}…`;
+  return flat.length <= room ? flat : `${flat.slice(0, Math.max(0, room - 1))}…`;
 }
 
 function getErrorCode(error) {
@@ -373,6 +379,11 @@ export function getAsrFailureMessage(error) {
       // canvas that does not scroll, which is the failure this whole file is
       // careful about elsewhere. A real error code is a short token; anything
       // longer is not a code and is not worth the row it would cost.
-      return code ? `${COPY.asrFailed} (${boundCode(code)})` : COPY.asrFailed;
+      if (!code) {
+        return COPY.asrFailed;
+      }
+      // Three characters for the space and the parentheses around the code.
+      const room = MAX_ASR_MESSAGE_CHARS - COPY.asrFailed.length - 3;
+      return room > 0 ? `${COPY.asrFailed} (${boundCode(code, room)})` : COPY.asrFailed;
   }
 }

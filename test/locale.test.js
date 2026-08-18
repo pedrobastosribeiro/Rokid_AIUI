@@ -569,3 +569,13 @@ test('Parar cancels only when there is a request to cancel', () => {
   );
   assert.match(remote, /isPending\(\) \{\s*return Boolean\(this\.task\);/);
 });
+
+test('the composed ASR message stays on one rendered line', () => {
+  // `.error` is non-shrinking chrome whose height the page's 193px arithmetic
+  // never counted -- it is conditional, and it appears exactly when the panels
+  // are already full. A message that wraps takes that line from the panels
+  // below, on a renderer that then does not clip their text. Bounding only the
+  // appended code left the composed pair free to wrap.
+  const composed = getAsrFailureMessage({ error: 'y'.repeat(300) });
+  assert.ok(composed.length <= 72, `${composed.length} chars would wrap`);
+});

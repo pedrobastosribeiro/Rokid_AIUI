@@ -201,25 +201,25 @@ test('the key scan matches project-scoped keys containing underscores', () => {
   }
 });
 
-test('the secrets check enforces emptiness only on secret-bearing names', () => {
-  // `secrets.js` also carries REMOTE_BASE_URL and REMOTE_MODEL, which the
-  // sample's README tells you to fill in to aim at another provider and which
-  // must survive into the packed app. Requiring every uppercase export to be
-  // empty made the documented customisation impossible to commit.
+test('the secrets check allowlists public names and defaults to must-be-empty', () => {
+  // An allowlist, not a guess at which names look secret. Enumerating secret
+  // words means the first one nobody thought of -- API_AUTH, ACCESS_CODE,
+  // PRIVATE_VALUE -- reaches a public repository, and the content scan is no
+  // net there either: it knows two key shapes, so a provider using a third is
+  // exactly the case that slips through both. An unfamiliar name has to fail.
   const validator = readFileSync(
     new URL('../scripts/ci/validate.mjs', import.meta.url),
     'utf8',
   );
-  const pattern = validator.match(/const SECRET_NAME = (\/[^/]+\/)/);
-  assert.ok(pattern, 'expected a SECRET_NAME pattern');
-  const body = pattern[1].slice(1, -1);
-  const matcher = new RegExp(body);
-  for (const name of ['REMOTE_API_KEY', 'AUTH_TOKEN', 'CLIENT_SECRET']) {
-    assert.ok(matcher.test(name), `${name} should be treated as a secret`);
-  }
-  for (const name of ['REMOTE_BASE_URL', 'REMOTE_MODEL']) {
-    assert.ok(!matcher.test(name), `${name} is public configuration, not a secret`);
-  }
+  const list = validator.match(/const PUBLIC_NAMES = new Set\(\[([^\]]*)\]\)/);
+  assert.ok(list, 'expected a PUBLIC_NAMES allowlist');
+  const names = [...list[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(names.sort(), ['REMOTE_BASE_URL', 'REMOTE_MODEL']);
+
+  // The guard must skip the allowlisted names, not test for secret-looking
+  // ones -- the inverted form is what let unfamiliar credentials through.
+  assert.match(validator, /if \(PUBLIC_NAMES\.has\(name\)\) continue;/);
+  assert.doesNotMatch(validator, /SECRET_NAME/);
 });
 
 test('an early abbreviation does not truncate the whole reply', () => {
@@ -291,4 +291,15 @@ test('times and version numbers survive the clamp', () => {
     const clamped = clampSpeech(text, 40);
     assert.doesNotMatch(clamped, /\d\.$/, `cut inside a number: ${clamped}`);
   }
+});
+
+test('a terminator is judged against the full text, not the slice', () => {
+  // A regex anchored on the sliced window treats the end of the slice as the
+  // end of the string, so a limit landing right after the period in "5.42"
+  // satisfies it and cuts inside the number -- a boundary that is an artefact
+  // of where the budget fell, not of the sentence. The wearer hears "é 5." and
+  // the figure that was the answer is now wrong rather than merely truncated.
+  const text = 'O valor informado agora para a versão é 5.42 e continua depois';
+  const clamped = clampSpeech(text, 42);
+  assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
 });

@@ -299,12 +299,19 @@ const checks = {
   secrets(fail, note) {
     let placeholders = 0;
 
-    // Only the secret-bearing names must stay empty. `secrets.js` also carries
-    // public provider settings -- REMOTE_BASE_URL, REMOTE_MODEL -- which the
-    // sample's README tells you to fill in to aim at another provider, and
-    // which have to survive into the packed app for that to work. Failing on
-    // those would make the documented customisation impossible to commit.
-    const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)/;
+    // An allowlist of the settings that are public, not a guess at which names
+    // look secret. `secrets.js` carries provider settings the sample's README
+    // tells you to fill in -- REMOTE_BASE_URL, REMOTE_MODEL -- which have to
+    // survive into the packed app, so they cannot be required to stay empty.
+    //
+    // Everything else must. Naming the secrets instead would mean enumerating
+    // every word a credential might be called, and the first one nobody thought
+    // of -- API_AUTH, ACCESS_CODE, PRIVATE_VALUE -- passes into a public
+    // repository. The content scan below is no safety net there: it knows two
+    // key shapes, and a provider using a third is exactly the case that would
+    // slip through both. Defaulting to "must be empty" makes an unfamiliar name
+    // fail loudly, which is the direction a credential guard should fail.
+    const PUBLIC_NAMES = new Set(['REMOTE_BASE_URL', 'REMOTE_MODEL']);
 
     for (const file of tracked('samples/*/lib/secrets.js')) {
       const source = read(file);
@@ -314,7 +321,7 @@ const checks = {
         /export\s+const\s+([A-Z0-9_]+)\s*=\s*(['"])(.*?)\2/g,
       );
       for (const [, name, , value] of assignments) {
-        if (!SECRET_NAME.test(name)) continue;
+        if (PUBLIC_NAMES.has(name)) continue;
         placeholders += 1;
         if (value.trim()) {
           fail(`${file}: ${name} is not empty -- clear it before committing`);

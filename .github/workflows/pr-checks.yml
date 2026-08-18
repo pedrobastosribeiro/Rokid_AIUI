@@ -45,8 +45,16 @@ on:
 # `refs/heads/<branch>` for a push, `refs/pull/N/merge` for a pull request --
 # and ungrouped they would run the same commit twice instead of one superseding
 # the other.
+#
+# The repository is part of the key because a branch name is not unique across
+# forks. Two fork pull requests both opened from `main` -- an ordinary thing for
+# a drive-by contributor -- would otherwise share a group, and with
+# cancel-in-progress each new push to one would cancel the other's checks.
 concurrency:
-  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  group: >-
+    pr-checks-${{ github.workflow }}-${{
+      github.event.pull_request.head.repo.full_name || github.repository
+    }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
