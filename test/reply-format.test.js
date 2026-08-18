@@ -325,11 +325,22 @@ function parseJobs(workflow) {
 
   const isContent = (line) => line.trim() !== '' && !/^\s*#/.test(line);
   const indentOf = (line) => line.match(/^ */)[0].length;
+  // A trailing `# ...` is a comment to YAML but just more characters to a
+  // substring match, so a qualifier appearing only inside one would satisfy an
+  // assertion while GitHub saw the bare name. A quoted scalar keeps its
+  // contents whole, since `#` inside quotes is literal.
+  const stripComment = (value) => {
+    const quoted = value.match(/^(['"])(?:\\.|(?!\1).)*\1/);
+    if (quoted) return quoted[0];
+    const comment = value.search(/(?:^|\s)#/);
+    return comment === -1 ? value : value.slice(0, comment).trim();
+  };
   const entryOf = (line) => {
     const m = line
       .trim()
       .match(/^(?:'([^']*)'|"([^"]*)"|([^:'"\s][^:]*?))\s*:(?:\s+(.*))?$/);
-    return m ? { key: (m[1] ?? m[2] ?? m[3]).trim(), value: (m[4] ?? '').trim() } : null;
+    if (!m) return null;
+    return { key: (m[1] ?? m[2] ?? m[3]).trim(), value: stripComment((m[4] ?? '').trim()) };
   };
 
   const body = lines.slice(start + 1).filter(isContent);
