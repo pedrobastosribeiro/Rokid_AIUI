@@ -303,3 +303,21 @@ test('a terminator is judged against the full text, not the slice', () => {
   const clamped = clampSpeech(text, 42);
   assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
 });
+
+test('CI does not cancel duplicate runs of the same commit', () => {
+  // `push` and `pull_request` both fire for a commit on a same-repo branch.
+  // Cancelling one of the pair made every healthy pull request render as "Some
+  // checks were not successful", in red, because GitHub reports a cancelled
+  // check as not successful. That is worse than noise: it teaches a reader to
+  // treat red as normal, so a check that genuinely fails looks like the usual
+  // background. Both runs complete instead, at about a minute of duplicated CI.
+  const workflow = readFileSync(
+    new URL('../.github/workflows/pr-checks.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(workflow, /cancel-in-progress: false/);
+
+  // The group still has to distinguish forks. It is inert while cancellation is
+  // off, and wrong the moment anyone turns it back on.
+  assert.match(workflow, /head\.repo\.full_name \|\| github\.repository/);
+});

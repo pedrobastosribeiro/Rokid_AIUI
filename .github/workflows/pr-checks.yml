@@ -25,10 +25,10 @@ on:
   # repository. A fork contributor pushes to their own fork, so the base repo
   # sees no push at all -- drop `synchronize` and a fork PR is checked once, on
   # `opened`, and every later commit inherits that green tick without being
-  # verified. A stale pass on an unverified commit is a correctness problem; the
-  # duplicate run this causes on same-repo PRs, where the concurrency group
-  # cancels one of the pair, is cosmetic noise on the checks list. Taking the
-  # noise is the cheaper mistake.
+  # verified. A stale pass on an unverified commit is the failure worth avoiding;
+  # the duplicated run it costs on same-repo pull requests is paid for in CI
+  # minutes, and the concurrency block below explains why it is paid that way
+  # rather than by cancelling one of the pair.
   pull_request:
     types:
       - opened
@@ -40,22 +40,30 @@ on:
   # running in parallel with them. See publish-create-aiui-agent.yml.
   workflow_call:
 
-# A new push makes the in-flight run obsolete. Keyed on the branch rather than
-# on `github.ref`, because those differ between the two triggers above --
-# `refs/heads/<branch>` for a push, `refs/pull/N/merge` for a pull request --
-# and ungrouped they would run the same commit twice instead of one superseding
-# the other.
+# Grouped per branch per repository, but nothing is cancelled.
 #
-# The repository is part of the key because a branch name is not unique across
-# forks. Two fork pull requests both opened from `main` -- an ordinary thing for
-# a drive-by contributor -- would otherwise share a group, and with
-# cancel-in-progress each new push to one would cancel the other's checks.
+# `push` and `pull_request` both fire for a commit on a same-repo branch, and
+# cancelling one of the pair is what a concurrency group is normally for. Here
+# it made every healthy pull request render as "Some checks were not
+# successful", in red, because GitHub reports a cancelled check as not
+# successful. That is not cosmetic: it teaches everyone to read red as normal,
+# and the next time a check genuinely fails it looks like the usual noise.
+#
+# So both runs complete. The cost is roughly a minute of duplicated CI per push
+# -- these jobs take about 25 seconds -- against a checks list where red means
+# something broke. Cancellation would be the better trade on a slow suite; on
+# this one it is not.
+#
+# The repository is still part of the key because a branch name is not unique
+# across forks, and the key matters again the moment cancellation is turned back
+# on. Two fork pull requests both opened from `main` -- an ordinary thing for a
+# drive-by contributor -- must not share a group.
 concurrency:
   group: >-
     pr-checks-${{ github.workflow }}-${{
       github.event.pull_request.head.repo.full_name || github.repository
     }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
