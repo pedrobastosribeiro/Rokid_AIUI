@@ -96,9 +96,11 @@ function getErrorMessage(error, limit = MAX_ERROR_CHARS) {
   return clampErrorLine(message || code || String(error), limit);
 }
 
-// ASR failures go through getAsrFailureMessage(), which maps each error code to
-// a fixed pt-BR sentence and so needs no clamping. getErrorMessage() below stays
-// for model and TTS errors, where the host text is arbitrary and unbounded.
+// ASR failures go through getAsrFailureMessage(), which returns a fixed pt-BR
+// sentence -- plus, for a code outside its map, that code bounded and flattened
+// at the source. So it stays safe to render straight into `.error` without a
+// clamp here. getErrorMessage() below stays for model and TTS errors, where the
+// host text is arbitrary and unbounded.
 
 function extractTranscript(event) {
   const results = event && event.results ? event.results : null;
@@ -523,7 +525,14 @@ export default {
       // leaving Parar inert during one strands the wearer on "Pensando…" for
       // the full 12-second timeout with no way out. Invalidate the turn first
       // so the reply is discarded even if it lands anyway, then abort.
-      if (this.remote && this.remote.isConfigured()) {
+      //
+      // Keyed on there being a request to abort, not on a key being configured.
+      // Those differ exactly when the remote call already failed and the host
+      // fallback is running: `abort()` would then be a no-op while this branch
+      // still cleared `promptInFlight` and bumped the turn, reporting a
+      // cancellation that did not happen and leaving the host call running
+      // unattended, free to interleave with the next turn on the same session.
+      if (this.remote && this.remote.isPending()) {
         this.activeTurnId += 1;
         this.promptInFlight = false;
         this.remote.abort();
@@ -878,6 +887,15 @@ export default {
 
 .actions {
   display: flex;
+  /* Explicit, not inherited from a default. CLAUDE.md records that Taffy lays
+     out as a row unless told otherwise, and this relied on that -- then
+     rendered as a column anyway, stacking three full-width buttons where one
+     row was budgeted. That is ~60px the chrome arithmetic above never accounted
+     for, taken straight out of the two content panels, which then overflow
+     their box: `overflow` is not on the confirmed WXSS list, so nothing clips
+     and the text draws on top of itself. A layout that must be a row should say
+     so rather than depend on a default that differs between renderers. */
+  flex-direction: row;
   gap: 8px;
   margin-top: auto;
 }
