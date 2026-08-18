@@ -351,6 +351,11 @@ export function getAsrFailureMessage(error) {
     case 'language-not-supported':
       return COPY.asrLanguage;
     default:
-      return COPY.asrFailed;
+      // An unmapped code is the one case where the fixed sentence tells nobody
+      // anything -- not the wearer, who cannot act on it either way, and not
+      // whoever is debugging, who needs to know *which* failure this was before
+      // it can be mapped. Appending the raw code costs a few characters and is
+      // the difference between "speech recognition failed" and a lead.
+      return code ? `${COPY.asrFailed} (${code})` : COPY.asrFailed;
   }
 }

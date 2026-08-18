@@ -878,6 +878,15 @@ export default {
 
 .actions {
   display: flex;
+  /* Explicit, not inherited from a default. CLAUDE.md records that Taffy lays
+     out as a row unless told otherwise, and this relied on that -- then
+     rendered as a column anyway, stacking three full-width buttons where one
+     row was budgeted. That is ~60px the chrome arithmetic above never accounted
+     for, taken straight out of the two content panels, which then overflow
+     their box: `overflow` is not on the confirmed WXSS list, so nothing clips
+     and the text draws on top of itself. A layout that must be a row should say
+     so rather than depend on a default that differs between renderers. */
+  flex-direction: row;
   gap: 8px;
   margin-top: auto;
 }

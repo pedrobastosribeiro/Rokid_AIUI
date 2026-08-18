@@ -69,7 +69,9 @@ test('maps ASR failures to short pt-BR retry copy', () => {
     getAsrFailureMessage({ error: 'language-not-supported' }),
     COPY.asrLanguage,
   );
-  assert.equal(getAsrFailureMessage({ error: 'unknown' }), COPY.asrFailed);
+  // An unmapped code carries itself through, because the fixed sentence alone
+  // leaves both the wearer and the debugger with nothing to act on.
+  assert.equal(getAsrFailureMessage({ error: 'unknown' }), `${COPY.asrFailed} (unknown)`);
   assert.equal(getAsrFailureMessage('raw'), COPY.asrFailed);
   assert.equal(getAsrFailureMessage(null), COPY.asrFailed);
 });
@@ -519,4 +521,16 @@ test('a cancelled turn does not start a host call on its way out', () => {
   );
   assert.ok(guard, 'expected a staleness guard before the REMOTE_REQUIRED branch');
   assert.match(guard[1], /!this\.isTurnCurrent\(turnId\)/);
+});
+
+test('the action row states its direction instead of inheriting one', () => {
+  // It relied on the documented Taffy default of row, and rendered as a column
+  // anyway -- three full-width buttons where one row was budgeted. That is
+  // ~60px the chrome arithmetic never accounted for, taken from the two content
+  // panels, which then overflow: `overflow` is not a confirmed WXSS property,
+  // so nothing clips and the text draws on top of itself. A layout that must be
+  // a row has to say so.
+  const rule = inkSource.match(/\.actions \{[\s\S]*?display: flex;[\s\S]*?\}/);
+  assert.ok(rule, 'expected the .actions flex rule');
+  assert.match(rule[0], /flex-direction: row/);
 });
