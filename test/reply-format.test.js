@@ -304,20 +304,29 @@ test('a terminator is judged against the full text, not the slice', () => {
   assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
 });
 
-test('CI does not cancel duplicate runs of the same commit', () => {
-  // `push` and `pull_request` both fire for a commit on a same-repo branch.
-  // Cancelling one of the pair made every healthy pull request render as "Some
-  // checks were not successful", in red, because GitHub reports a cancelled
-  // check as not successful. That is worse than noise: it teaches a reader to
-  // treat red as normal, so a check that genuinely fails looks like the usual
-  // background. Both runs complete instead, at about a minute of duplicated CI.
+test('CI runs each commit once, so a cancelled check means superseded', () => {
+  // `push` and `pull_request` both fire for a same-repo branch, and that pair
+  // is what produced cancelled checks on healthy commits. `cancel-in-progress:
+  // false` does not fix it: GitHub cancels an existing *pending* run whenever
+  // another member of the group is queued, whatever that setting says. So the
+  // duplicate is removed rather than paid for -- every job skips the
+  // `pull_request` event when the head repository is this one, leaving that
+  // event to cover forks, whose pushes never reach this workflow.
   const workflow = readFileSync(
     new URL('../.github/workflows/pr-checks.yml', import.meta.url),
     'utf8',
   );
-  assert.match(workflow, /cancel-in-progress: false/);
+  const parsed = workflow.replace(/\s+/g, ' ');
+  const guards = [
+    ...parsed.matchAll(
+      /github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name != github\.repository/g,
+    ),
+  ];
+  assert.equal(guards.length, 3, 'every job must carry the guard, or one job duplicates');
 
-  // The group still has to distinguish forks. It is inert while cancellation is
-  // off, and wrong the moment anyone turns it back on.
+  // `synchronize` has to stay for the fork case the guard preserves.
+  assert.match(workflow, /- synchronize/);
+  // The group still has to distinguish forks: two fork pull requests opened
+  // from `main` must not cancel each other.
   assert.match(workflow, /head\.repo\.full_name \|\| github\.repository/);
 });

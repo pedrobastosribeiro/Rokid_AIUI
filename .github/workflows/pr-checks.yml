@@ -18,17 +18,11 @@ on:
       # every commit.
       - pt-br
       - pt-br-preview
-  # `synchronize` is kept even though `push` overlaps it, and the overlap is a
-  # deliberate cost rather than an oversight.
-  #
-  # `push` only covers a new commit on an open PR when the branch lives in this
-  # repository. A fork contributor pushes to their own fork, so the base repo
-  # sees no push at all -- drop `synchronize` and a fork PR is checked once, on
-  # `opened`, and every later commit inherits that green tick without being
-  # verified. A stale pass on an unverified commit is the failure worth avoiding;
-  # the duplicated run it costs on same-repo pull requests is paid for in CI
-  # minutes, and the concurrency block below explains why it is paid that way
-  # rather than by cancelling one of the pair.
+  # `synchronize` exists here for forks. A fork contributor pushes to their own
+  # fork, so this repository sees no `push` event -- without it a fork pull
+  # request is checked once on `opened` and every later commit inherits that
+  # green tick unverified. Same-repo pull requests do not need it, because their
+  # pushes land here, which is why the jobs below skip this event for them.
   pull_request:
     types:
       - opened
@@ -40,30 +34,25 @@ on:
   # running in parallel with them. See publish-create-aiui-agent.yml.
   workflow_call:
 
-# Grouped per branch per repository, but nothing is cancelled.
+# No duplicate to cancel, so cancellation goes back to meaning "this commit was
+# superseded" rather than "one of the pair lost a race".
 #
-# `push` and `pull_request` both fire for a commit on a same-repo branch, and
-# cancelling one of the pair is what a concurrency group is normally for. Here
-# it made every healthy pull request render as "Some checks were not
-# successful", in red, because GitHub reports a cancelled check as not
-# successful. That is not cosmetic: it teaches everyone to read red as normal,
-# and the next time a check genuinely fails it looks like the usual noise.
+# The pairing was the whole problem. `cancel-in-progress: false` looked like the
+# fix and is not: GitHub cancels an existing *pending* run whenever another
+# member of the group is queued, whatever that setting says, so a third arrival
+# while one is still running still produced a cancelled check on a healthy
+# commit. The jobs below skip the `pull_request` event for same-repository pull
+# requests instead, which removes the second run rather than paying for it.
 #
-# So both runs complete. The cost is roughly a minute of duplicated CI per push
-# -- these jobs take about 25 seconds -- against a checks list where red means
-# something broke. Cancellation would be the better trade on a slow suite; on
-# this one it is not.
-#
-# The repository is still part of the key because a branch name is not unique
-# across forks, and the key matters again the moment cancellation is turned back
-# on. Two fork pull requests both opened from `main` -- an ordinary thing for a
-# drive-by contributor -- must not share a group.
+# The repository is part of the key because a branch name is not unique across
+# forks: two fork pull requests both opened from `main` must not share a group
+# and cancel each other.
 concurrency:
   group: >-
     pr-checks-${{ github.workflow }}-${{
       github.event.pull_request.head.repo.full_name || github.repository
     }}-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -71,6 +60,13 @@ permissions:
 jobs:
   validate:
     name: Validate
+    # Skipped for a same-repository pull request, whose commits already reached
+    # this workflow through `push`. Running both is what created a pair for the
+    # concurrency group to cancel, and a cancelled check reads as a failure. A
+    # fork pull request has no such push here, so it still runs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -112,6 +108,13 @@ jobs:
 
   pack:
     name: Pack every sample
+    # Skipped for a same-repository pull request, whose commits already reached
+    # this workflow through `push`. Running both is what created a pair for the
+    # concurrency group to cancel, and a cancelled check reads as a failure. A
+    # fork pull request has no such push here, so it still runs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -129,6 +132,13 @@ jobs:
 
   scaffold:
     name: Scaffold a project from the packed package
+    # Skipped for a same-repository pull request, whose commits already reached
+    # this workflow through `push`. Running both is what created a pair for the
+    # concurrency group to cancel, and a cancelled check reads as a failure. A
+    # fork pull request has no such push here, so it still runs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
