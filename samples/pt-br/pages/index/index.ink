@@ -96,9 +96,11 @@ function getErrorMessage(error, limit = MAX_ERROR_CHARS) {
   return clampErrorLine(message || code || String(error), limit);
 }
 
-// ASR failures go through getAsrFailureMessage(), which maps each error code to
-// a fixed pt-BR sentence and so needs no clamping. getErrorMessage() below stays
-// for model and TTS errors, where the host text is arbitrary and unbounded.
+// ASR failures go through getAsrFailureMessage(), which returns a fixed pt-BR
+// sentence -- plus, for a code outside its map, that code bounded and flattened
+// at the source. So it stays safe to render straight into `.error` without a
+// clamp here. getErrorMessage() below stays for model and TTS errors, where the
+// host text is arbitrary and unbounded.
 
 function extractTranscript(event) {
   const results = event && event.results ? event.results : null;

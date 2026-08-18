@@ -534,3 +534,18 @@ test('the action row states its direction instead of inheriting one', () => {
   assert.ok(rule, 'expected the .actions flex rule');
   assert.match(rule[0], /flex-direction: row/);
 });
+
+test('an unmapped ASR code cannot grow the error line without bound', () => {
+  // The page renders this straight into `.error`, which is flex-shrink: 0
+  // chrome on a 352px canvas that does not scroll. This branch is the only one
+  // whose length the host controls, so it is the only one that could push the
+  // action row off the display -- the exact failure the rest of the page is
+  // careful about.
+  const long = getAsrFailureMessage({ error: 'x'.repeat(500) });
+  assert.ok(long.length < COPY.asrFailed.length + 40, `unbounded: ${long.length} chars`);
+
+  // A newline survives a character budget and still costs a rendered line, in
+  // an element that neither shrinks nor caps its line count.
+  const multiline = getAsrFailureMessage({ error: 'erro\nem\nvarias\nlinhas' });
+  assert.doesNotMatch(multiline, /\n/);
+});

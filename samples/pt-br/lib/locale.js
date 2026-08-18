@@ -327,6 +327,16 @@ export function applyPortugueseSpeech(utterance) {
   return utterance;
 }
 
+const MAX_ASR_CODE_CHARS = 32;
+
+// Flattened as well as truncated: a newline survives the character budget and
+// still costs a rendered line in an element that neither shrinks nor caps its
+// line count.
+function boundCode(code) {
+  const flat = String(code).replace(/\s+/g, ' ').trim();
+  return flat.length <= MAX_ASR_CODE_CHARS ? flat : `${flat.slice(0, MAX_ASR_CODE_CHARS - 1)}…`;
+}
+
 function getErrorCode(error) {
   if (!error || typeof error === 'string') {
     return '';
@@ -356,6 +366,13 @@ export function getAsrFailureMessage(error) {
       // whoever is debugging, who needs to know *which* failure this was before
       // it can be mapped. Appending the raw code costs a few characters and is
       // the difference between "speech recognition failed" and a lead.
-      return code ? `${COPY.asrFailed} (${code})` : COPY.asrFailed;
+      //
+      // Bounded, because this is the only branch whose length the host controls.
+      // The page renders this straight into `.error`, which is `flex-shrink: 0`
+      // chrome -- an unbounded value there pushes the action row off a 352px
+      // canvas that does not scroll, which is the failure this whole file is
+      // careful about elsewhere. A real error code is a short token; anything
+      // longer is not a code and is not worth the row it would cost.
+      return code ? `${COPY.asrFailed} (${boundCode(code)})` : COPY.asrFailed;
   }
 }
