@@ -307,34 +307,55 @@ test('a terminator is judged against the full text, not the slice', () => {
   assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
 });
 
-// Job-level `if:` conditions, with both the jobs' indentation and each job's
-// key indentation derived from the document instead of assumed. Steps sit
-// deeper than their job's keys, so they are never mistaken for one.
-function jobLevelConditions(workflow) {
+// The workflow's jobs, each with its own direct keys. Enumerating the mappings
+// is what makes the assertions below invariants rather than samples: they can
+// then say "no job has X" and "every job has Y" and mean it, including for a
+// job added later.
+//
+// Nothing here assumes a layout. Indentation is read off the document -- the
+// jobs' own indent from the first entry, each job's key indent from its first
+// key -- so reindenting the mapping changes nothing, and steps, which sit
+// deeper, are never mistaken for job keys. Keys are unquoted before they are
+// compared, because `if:`, `'if':`, `"if":` and `if :` are one key to YAML and
+// GitHub honours all four.
+function parseJobs(workflow) {
   const lines = workflow.split('\n');
   const start = lines.findIndex((line) => /^jobs:/.test(line));
   if (start === -1) throw new Error('no jobs: mapping in the workflow');
 
   const isContent = (line) => line.trim() !== '' && !/^\s*#/.test(line);
   const indentOf = (line) => line.match(/^ */)[0].length;
+  const entryOf = (line) => {
+    const m = line
+      .trim()
+      .match(/^(?:'([^']*)'|"([^"]*)"|([^:'"\s][^:]*?))\s*:(?:\s+(.*))?$/);
+    return m ? { key: (m[1] ?? m[2] ?? m[3]).trim(), value: (m[4] ?? '').trim() } : null;
+  };
 
   const body = lines.slice(start + 1).filter(isContent);
   if (body.length === 0) return [];
   const jobIndent = indentOf(body[0]);
 
-  const found = [];
+  const jobs = [];
+  let current = null;
   let keyIndent = null;
   for (const line of body) {
     const indent = indentOf(line);
     if (indent < jobIndent) break;
     if (indent === jobIndent) {
+      const entry = entryOf(line);
+      current = { name: entry ? entry.key : line.trim(), keys: new Map() };
+      jobs.push(current);
       keyIndent = null;
       continue;
     }
+    if (current === null) continue;
     if (keyIndent === null) keyIndent = indent;
-    if (indent === keyIndent && /^if:/.test(line.trim())) found.push(line.trim());
+    if (indent !== keyIndent) continue;
+    const entry = entryOf(line);
+    if (entry) current.keys.set(entry.key, entry.value);
   }
-  return found;
+  return jobs;
 }
 
 test('both CI runs survive, because they do not check the same tree', () => {
@@ -358,12 +379,11 @@ test('both CI runs survive, because they do not check the same tree', () => {
   // Within one event, superseding an older commit is still the right behaviour.
   assert.match(group, /cancel-in-progress: true/);
 
-  // No job may carry a job-level condition at all. The invariant is structural
-  // rather than textual: the guard this pins down can be written `A != B` or
-  // `!(A == B)`, with the operands either way round, or split across lines, and
-  // a regex for any one spelling passes while the merge-result jobs are skipped
-  // again. A guard was tried and reverted, because the `push` run is not a
-  // substitute for the `pull_request` run, on two counts.
+  const jobs = parseJobs(workflow);
+  assert.ok(jobs.length >= 3, `expected the CI jobs, found ${jobs.map((j) => j.name).join(', ')}`);
+
+  // No job may carry a job-level condition. A guard was tried and reverted,
+  // because the `push` run is not a substitute for the `pull_request` run:
   //
   //  1. `pull_request` checks out the synthetic merge commit; `push` checks out
   //     the branch tip. A branch behind its base can pass at the tip and fail
@@ -373,31 +393,34 @@ test('both CI runs survive, because they do not check the same tree', () => {
   //     entirely, so there is no push run to defer to. Trigger edits are then
   //     the one change that goes unverified, which is the worst possible set.
   //
-  // Both were reported on #21 after the guard shipped.
-  //
-  // Indentation is read off the file rather than assumed. An earlier version
-  // matched `^ {4}if:`, which is only structural for as long as nobody
-  // reindents the jobs mapping -- legal YAML that GitHub still honours, and it
-  // would have returned no guards while the jobs were being skipped.
-  assert.deepEqual(jobLevelConditions(workflow), [], 'a job-level condition is back');
+  // Both were reported on #21 after the guard shipped. The invariant is
+  // deliberately wider than that guard: any job-level condition fails here,
+  // including a legitimate one, so reintroducing one is a deliberate act.
+  assert.deepEqual(
+    jobs.filter((job) => job.keys.has('if')).map((job) => job.name),
+    [],
+    'a job-level condition is back; that is how the merge-result run got skipped',
+  );
 
-  // Both runs land in one checks list, so a failure has to name its tree. Only
-  // the `push` run is qualified. A fork pull request, and one from a
-  // `branches-ignore` ref, has no push run at all, so qualifying the
-  // `pull_request` run instead would leave those pull requests with nothing
-  // under the plain name -- exactly where that run is the only coverage.
+  // Every job -- not three of them -- must qualify its push run, or that job's
+  // two runs arrive under one name and a failure does not say which tree it
+  // came from.
   //
-  // The test is `== 'push'` and not `!= 'pull_request'`, which would also
-  // catch `workflow_dispatch`. Dispatch is the documented fallback for
-  // `pull_request` delivery failing, its checks attach to the pull request the
-  // same way, and suffixing it would leave the fallback unable to satisfy a
+  // The qualifier tests `== 'push'` rather than `!= 'pull_request'`, which
+  // would also catch `workflow_dispatch`. Dispatch is the documented fallback
+  // for `pull_request` delivery failing, its checks attach to the pull request
+  // the same way, and suffixing it would leave the fallback unable to satisfy a
   // bare required context -- blocking the pull request it exists to unblock.
-  const qualified = [
-    ...workflow.matchAll(
-      /name: "[^"]*\$\{\{ github\.event_name == 'push' && ' \(branch tip\)' \|\| '' \}\}"/g,
-    ),
-  ];
-  assert.equal(qualified.length, 3, 'every job must distinguish its two runs');
+  //
+  // The bare name goes to the `pull_request` run because that is the only run
+  // every pull request has: a fork never pushes here, and neither does a
+  // `branches-ignore` ref.
+  const QUALIFIER = "${{ github.event_name == 'push' && ' (branch tip)' || '' }}";
+  assert.deepEqual(
+    jobs.filter((job) => !(job.keys.get('name') ?? '').includes(QUALIFIER)).map((job) => job.name),
+    [],
+    'every job must distinguish its two runs',
+  );
 
   // `synchronize` is the only thing that checks a fork's later commits.
   assert.match(workflow, /- synchronize/);
