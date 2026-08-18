@@ -304,42 +304,55 @@ test('a terminator is judged against the full text, not the slice', () => {
   assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
 });
 
-test('CI runs each commit once, so a cancelled check means superseded', () => {
-  // `push` and `pull_request` both fire for a same-repo branch, and that pair
-  // is what produced cancelled checks on healthy commits. `cancel-in-progress:
-  // false` does not fix it: GitHub cancels an existing *pending* run whenever
-  // another member of the group is queued, whatever that setting says. So the
-  // duplicate is removed rather than paid for -- every job skips the
-  // `pull_request` event when the head repository is this one, leaving that
-  // event to cover forks, whose pushes never reach this workflow.
+test('both CI runs survive, because they do not check the same tree', () => {
   const workflow = readFileSync(
     new URL('../.github/workflows/pr-checks.yml', import.meta.url),
     'utf8',
   );
-  const parsed = workflow.replace(/\s+/g, ' ');
-  const guards = [
-    ...parsed.matchAll(
-      /inputs\.run-always \|\| github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name != github\.repository/g,
+
+  // The fix for cancelled checks on healthy commits is this one key, not any
+  // job condition. `push` and `pull_request` both fire for a same-repo commit,
+  // and a shared group made one cancel the other -- which GitHub reports as
+  // "not successful". Separated by event, neither can reach the other.
+  const group = workflow.slice(
+    workflow.indexOf('concurrency:'),
+    workflow.indexOf('permissions:'),
+  );
+  assert.match(group, /github\.event_name/);
+  // Still fork-safe: two fork pull requests opened from `main` share a branch
+  // name and must not cancel each other.
+  assert.match(group, /head\.repo\.full_name \|\| github\.repository/);
+  // Within one event, superseding an older commit is still the right behaviour.
+  assert.match(group, /cancel-in-progress: true/);
+
+  // No job may skip itself for being a same-repo pull request. That guard was
+  // tried and reverted: the `push` run is not a substitute for the
+  // `pull_request` run, on two counts.
+  //
+  //  1. `pull_request` checks out the synthetic merge commit; `push` checks out
+  //     the branch tip. A branch behind its base can pass at the tip and fail
+  //     merged -- a rename on `main` against a link added here does it, and
+  //     only the merge-commit run would catch it.
+  //  2. A pull request that edits the trigger block can stop matching `push`
+  //     entirely, so there is no push run to defer to. Trigger edits are then
+  //     the one change that goes unverified, which is the worst possible set.
+  //
+  // Both were reported on #21 after the guard shipped.
+  assert.doesNotMatch(
+    workflow,
+    /full_name != github\.repository/,
+    'a same-repo skip guard is back; it leaves the merge result unverified',
+  );
+
+  // Both runs land in one checks list, so a failure has to name its tree. The
+  // suffix is conditional so the push run's check name is unchanged.
+  const suffixes = [
+    ...workflow.matchAll(
+      /name: "[^"]*\$\{\{ github\.event_name == 'pull_request' && ' \(merge result\)' \|\| '' \}\}"/g,
     ),
   ];
-  assert.equal(guards.length, 3, 'every job must carry the guard, or one job duplicates');
+  assert.equal(suffixes.length, 3, 'every job must distinguish its two runs');
 
-  // `inputs.run-always` has to lead. Under `workflow_call` the rest of the
-  // guard reads the *caller's* event, so a caller triggered by a same-repo
-  // pull request would skip every job and still report a satisfied gate --
-  // publishing a release on checks that never ran. The input defaults to true
-  // so a caller opts in without having to know any of that.
-  assert.match(parsed, /run-always: description: [^#]*type: boolean default: true/);
-
-  // `synchronize` has to stay for the fork case the guard preserves.
+  // `synchronize` is the only thing that checks a fork's later commits.
   assert.match(workflow, /- synchronize/);
-  // The concurrency key must separate the two events. A job-level `if:` does not
-  // stop the run from being created -- it only skips the jobs inside it -- so a
-  // shared key let the skipping `pull_request` run cancel the `push` run that
-  // was doing the work, leaving the commit verified by nobody. Observed once.
-  const group = workflow.slice(workflow.indexOf('concurrency:'));
-  assert.match(group, /github\.event_name/);
-  // And still distinguish forks: two fork pull requests opened from `main`
-  // must not cancel each other.
-  assert.match(group, /head\.repo\.full_name \|\| github\.repository/);
 });

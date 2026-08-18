@@ -18,11 +18,9 @@ on:
       # every commit.
       - pt-br
       - pt-br-preview
-  # `synchronize` exists here for forks. A fork contributor pushes to their own
-  # fork, so this repository sees no `push` event -- without it a fork pull
-  # request is checked once on `opened` and every later commit inherits that
-  # green tick unverified. Same-repo pull requests do not need it, because their
-  # pushes land here, which is why the jobs below skip this event for them.
+  # `synchronize` is what checks a pull request's later commits. A fork's pushes
+  # never reach this repository at all, so without it a fork contributor is
+  # checked once on `opened` and every commit after that inherits the tick.
   pull_request:
     types:
       - opened
@@ -32,29 +30,37 @@ on:
   workflow_dispatch:
   # Callable so the publish workflow gates on these same checks instead of
   # running in parallel with them. See publish-create-aiui-agent.yml.
-  #
-  # `run-always` exists because the job guards below read `github.event_name`,
-  # and under `workflow_call` that is the *caller's* event rather than this
-  # workflow's. A caller triggered by a same-repo `pull_request` would therefore
-  # match the duplicate-skipping condition, skip all three jobs, and still
-  # satisfy its `needs:` -- gating a release on checks that never ran. The
-  # default makes every caller opt in without knowing any of this; a caller that
-  # genuinely wants the skip behaviour has to ask for it.
   workflow_call:
-    inputs:
-      run-always:
-        description: Run the jobs regardless of the caller's event.
-        type: boolean
-        default: true
 
 # Grouped per event, per repository, per branch -- and the event is load-bearing.
 #
-# A job-level `if:` does not stop a workflow run from being created; it only
-# skips the jobs inside it. So the `pull_request` run for a same-repo commit
-# still joins the group, and with a shared key it cancelled the `push` run that
-# was doing the actual work before skipping its own jobs. Observed on this very
-# pull request: three cancelled, three skipped, the commit verified by nobody.
-# Keying on the event keeps those two runs from ever reaching for each other.
+# `push` and `pull_request` both fire for a commit on a same-repo branch. Under
+# a shared key one cancelled the other, and GitHub reports a cancelled check as
+# "not successful", so every healthy pull request rendered partly red. That is
+# not cosmetic: a checks list that is always partly red teaches its reader that
+# red is normal, and the next genuine failure then looks like the background.
+#
+# Keying on the event keeps that pair apart. Both runs complete, which costs
+# about a minute of duplicated CI per push against jobs of roughly 25 seconds.
+#
+# Worth paying, because the two runs do not check the same tree:
+#
+#   * the `push` run checks out the branch tip;
+#   * the `pull_request` run checks out the synthetic merge commit -- the tree
+#     that will actually land on `main`.
+#
+# A branch behind its base can be green at the tip and broken once merged. A
+# sample renamed on `main` against a link added here is enough: `links` passes
+# on both trees separately and fails on the merge. Only the `pull_request` run
+# ever sees that. And a pull request that edits the trigger block above can stop
+# matching `push` altogether -- narrowing `push.branches`, or coming from a
+# `branches-ignore` ref -- in which case the `push` run does not exist and the
+# `pull_request` run is the only one there is.
+#
+# An earlier revision of this branch skipped the `pull_request` jobs for
+# same-repo pull requests to avoid the duplicate, which is why both hazards are
+# written down here instead of being rediscovered. Skipping a run is only free
+# when it is genuinely redundant, and this one is not.
 #
 # Within one event, cancellation still means what it should: a newer commit
 # supersedes an older run on the same branch, and the cancelled check lands on
@@ -74,19 +80,11 @@ permissions:
 
 jobs:
   validate:
-    name: Validate
-    # Skipped for a same-repository pull request, whose commits already reached
-    # this workflow through `push`. Running both is what created a pair for the
-    # concurrency group to cancel, and a cancelled check reads as a failure. A
-    # fork pull request has no such push here, so it still runs.
-    #
-    # `inputs.run-always` comes first because a caller invoking this workflow
-    # means to run it. Without that clause the guard would read the caller's
-    # event and could skip everything while still reporting a satisfied gate.
-    if: >-
-      inputs.run-always ||
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name != github.repository
+    # Both runs land in the same checks list, so the name has to say which tree
+    # failed. The suffix is conditional rather than unconditional so the `push`
+    # run's check keeps the exact name it has today -- anything configured
+    # elsewhere against "Validate" goes on being satisfied by it.
+    name: "Validate${{ github.event_name == 'pull_request' && ' (merge result)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -127,19 +125,7 @@ jobs:
         run: node scripts/ci/validate.mjs tests
 
   pack:
-    name: Pack every sample
-    # Skipped for a same-repository pull request, whose commits already reached
-    # this workflow through `push`. Running both is what created a pair for the
-    # concurrency group to cancel, and a cancelled check reads as a failure. A
-    # fork pull request has no such push here, so it still runs.
-    #
-    # `inputs.run-always` comes first because a caller invoking this workflow
-    # means to run it. Without that clause the guard would read the caller's
-    # event and could skip everything while still reporting a satisfied gate.
-    if: >-
-      inputs.run-always ||
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name != github.repository
+    name: "Pack every sample${{ github.event_name == 'pull_request' && ' (merge result)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -156,19 +142,7 @@ jobs:
         run: node scripts/ci/validate.mjs pack
 
   scaffold:
-    name: Scaffold a project from the packed package
-    # Skipped for a same-repository pull request, whose commits already reached
-    # this workflow through `push`. Running both is what created a pair for the
-    # concurrency group to cancel, and a cancelled check reads as a failure. A
-    # fork pull request has no such push here, so it still runs.
-    #
-    # `inputs.run-always` comes first because a caller invoking this workflow
-    # means to run it. Without that clause the guard would read the caller's
-    # event and could skip everything while still reporting a satisfied gate.
-    if: >-
-      inputs.run-always ||
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name != github.repository
+    name: "Scaffold a project from the packed package${{ github.event_name == 'pull_request' && ' (merge result)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
