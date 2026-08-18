@@ -549,3 +549,23 @@ test('an unmapped ASR code cannot grow the error line without bound', () => {
   const multiline = getAsrFailureMessage({ error: 'erro\nem\nvarias\nlinhas' });
   assert.doesNotMatch(multiline, /\n/);
 });
+
+test('Parar cancels only when there is a request to cancel', () => {
+  // `isConfigured()` says a key exists; `isPending()` says a request is in
+  // flight. They differ exactly when the remote call already failed and the
+  // host fallback is running -- there `abort()` is a no-op, so keying the stop
+  // path on configuration would clear promptInFlight and bump the turn while
+  // the host call kept running unattended, free to interleave with the next
+  // turn on the same session. That is the same corruption the turn guard in
+  // afterRemoteFailure exists to prevent, reached from the other side.
+  const stop = inkSource.match(/stopTalk\(\) \{[\s\S]*?\n {2}\},/);
+  assert.ok(stop, 'expected stopTalk');
+  assert.match(stop[0], /this\.remote\.isPending\(\)/);
+  assert.doesNotMatch(stop[0], /this\.remote\.isConfigured\(\)/);
+
+  const remote = readFileSync(
+    new URL('../samples/pt-br/lib/remote-model.js', import.meta.url),
+    'utf8',
+  );
+  assert.match(remote, /isPending\(\) \{\s*return Boolean\(this\.task\);/);
+});

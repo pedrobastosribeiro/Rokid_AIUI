@@ -525,7 +525,14 @@ export default {
       // leaving Parar inert during one strands the wearer on "Pensando…" for
       // the full 12-second timeout with no way out. Invalidate the turn first
       // so the reply is discarded even if it lands anyway, then abort.
-      if (this.remote && this.remote.isConfigured()) {
+      //
+      // Keyed on there being a request to abort, not on a key being configured.
+      // Those differ exactly when the remote call already failed and the host
+      // fallback is running: `abort()` would then be a no-op while this branch
+      // still cleared `promptInFlight` and bumped the turn, reporting a
+      // cancellation that did not happen and leaving the host call running
+      // unattended, free to interleave with the next turn on the same session.
+      if (this.remote && this.remote.isPending()) {
         this.activeTurnId += 1;
         this.promptInFlight = false;
         this.remote.abort();
