@@ -45,15 +45,23 @@ export function clampSpeech(value, limit = MAX_SPEECH_CHARS) {
 
   const window = text.slice(0, limit);
   let lastEnd = -1;
-  // The terminator must be followed by whitespace or the end of the window.
-  // Without that, "cinco vírgula 42" written as "5.42" -- or a time, or a
-  // version number -- offers a period mid-token, and the cut lands inside the
-  // number: the wearer hears "o dólar está a cinco" and the rest is gone. A
-  // real sentence end is always followed by a space or nothing.
-  const terminators = /[.!?…](?=\s|$)/g;
+  // A terminator only ends a sentence when whitespace or nothing follows it.
+  // Without that check, "cinco vírgula 42" written as "5.42" -- or a time, or a
+  // version number -- offers a period mid-token and the cut lands inside the
+  // number: the wearer hears "o dólar está a cinco" and the rest is gone.
+  //
+  // The following character is read from `text`, never from `window`. A regex
+  // anchored on the slice treats the end of the slice as the end of the string,
+  // so a limit landing immediately after the period in "5.42" would satisfy it
+  // and produce exactly the cut this guard exists to prevent -- the boundary
+  // would be an artefact of where the budget fell, not of the sentence.
+  const terminators = /[.!?…]/g;
   let match = terminators.exec(window);
   while (match !== null) {
-    lastEnd = match.index + 1;
+    const next = text[match.index + 1];
+    if (next === undefined || /\s/.test(next)) {
+      lastEnd = match.index + 1;
+    }
     match = terminators.exec(window);
   }
   // A period is not proof of a sentence. "O Dr. Silva recomenda…" puts one four

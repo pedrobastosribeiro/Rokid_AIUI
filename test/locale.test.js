@@ -69,7 +69,9 @@ test('maps ASR failures to short pt-BR retry copy', () => {
     getAsrFailureMessage({ error: 'language-not-supported' }),
     COPY.asrLanguage,
   );
-  assert.equal(getAsrFailureMessage({ error: 'unknown' }), COPY.asrFailed);
+  // An unmapped code carries itself through, because the fixed sentence alone
+  // leaves both the wearer and the debugger with nothing to act on.
+  assert.equal(getAsrFailureMessage({ error: 'unknown' }), `${COPY.asrFailed} (unknown)`);
   assert.equal(getAsrFailureMessage('raw'), COPY.asrFailed);
   assert.equal(getAsrFailureMessage(null), COPY.asrFailed);
 });
@@ -519,4 +521,61 @@ test('a cancelled turn does not start a host call on its way out', () => {
   );
   assert.ok(guard, 'expected a staleness guard before the REMOTE_REQUIRED branch');
   assert.match(guard[1], /!this\.isTurnCurrent\(turnId\)/);
+});
+
+test('the action row states its direction instead of inheriting one', () => {
+  // It relied on the documented Taffy default of row, and rendered as a column
+  // anyway -- three full-width buttons where one row was budgeted. That is
+  // ~60px the chrome arithmetic never accounted for, taken from the two content
+  // panels, which then overflow: `overflow` is not a confirmed WXSS property,
+  // so nothing clips and the text draws on top of itself. A layout that must be
+  // a row has to say so.
+  const rule = inkSource.match(/\.actions \{[\s\S]*?display: flex;[\s\S]*?\}/);
+  assert.ok(rule, 'expected the .actions flex rule');
+  assert.match(rule[0], /flex-direction: row/);
+});
+
+test('an unmapped ASR code cannot grow the error line without bound', () => {
+  // The page renders this straight into `.error`, which is flex-shrink: 0
+  // chrome on a 352px canvas that does not scroll. This branch is the only one
+  // whose length the host controls, so it is the only one that could push the
+  // action row off the display -- the exact failure the rest of the page is
+  // careful about.
+  const long = getAsrFailureMessage({ error: 'x'.repeat(500) });
+  assert.ok(long.length < COPY.asrFailed.length + 40, `unbounded: ${long.length} chars`);
+
+  // A newline survives a character budget and still costs a rendered line, in
+  // an element that neither shrinks nor caps its line count.
+  const multiline = getAsrFailureMessage({ error: 'erro\nem\nvarias\nlinhas' });
+  assert.doesNotMatch(multiline, /\n/);
+});
+
+test('Parar cancels only when there is a request to cancel', () => {
+  // `isConfigured()` says a key exists; `isPending()` says a request is in
+  // flight. They differ exactly when the remote call already failed and the
+  // host fallback is running -- there `abort()` is a no-op, so keying the stop
+  // path on configuration would clear promptInFlight and bump the turn while
+  // the host call kept running unattended, free to interleave with the next
+  // turn on the same session. That is the same corruption the turn guard in
+  // afterRemoteFailure exists to prevent, reached from the other side.
+  const stop = inkSource.match(/stopTalk\(\) \{[\s\S]*?\n {2}\},/);
+  assert.ok(stop, 'expected stopTalk');
+  assert.match(stop[0], /this\.remote\.isPending\(\)/);
+  assert.doesNotMatch(stop[0], /this\.remote\.isConfigured\(\)/);
+
+  const remote = readFileSync(
+    new URL('../samples/pt-br/lib/remote-model.js', import.meta.url),
+    'utf8',
+  );
+  assert.match(remote, /isPending\(\) \{\s*return Boolean\(this\.task\);/);
+});
+
+test('the composed ASR message stays on one rendered line', () => {
+  // `.error` is non-shrinking chrome whose height the page's 193px arithmetic
+  // never counted -- it is conditional, and it appears exactly when the panels
+  // are already full. A message that wraps takes that line from the panels
+  // below, on a renderer that then does not clip their text. Bounding only the
+  // appended code left the composed pair free to wrap.
+  const composed = getAsrFailureMessage({ error: 'y'.repeat(300) });
+  assert.ok(composed.length <= 72, `${composed.length} chars would wrap`);
 });
