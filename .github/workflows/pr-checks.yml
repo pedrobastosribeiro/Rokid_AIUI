@@ -18,17 +18,9 @@ on:
       # every commit.
       - pt-br
       - pt-br-preview
-  # `synchronize` is kept even though `push` overlaps it, and the overlap is a
-  # deliberate cost rather than an oversight.
-  #
-  # `push` only covers a new commit on an open PR when the branch lives in this
-  # repository. A fork contributor pushes to their own fork, so the base repo
-  # sees no push at all -- drop `synchronize` and a fork PR is checked once, on
-  # `opened`, and every later commit inherits that green tick without being
-  # verified. A stale pass on an unverified commit is a correctness problem; the
-  # duplicate run this causes on same-repo PRs, where the concurrency group
-  # cancels one of the pair, is cosmetic noise on the checks list. Taking the
-  # noise is the cheaper mistake.
+  # `synchronize` is what checks a pull request's later commits. A fork's pushes
+  # never reach this repository at all, so without it a fork contributor is
+  # checked once on `opened` and every commit after that inherits the tick.
   pull_request:
     types:
       - opened
@@ -40,19 +32,45 @@ on:
   # running in parallel with them. See publish-create-aiui-agent.yml.
   workflow_call:
 
-# A new push makes the in-flight run obsolete. Keyed on the branch rather than
-# on `github.ref`, because those differ between the two triggers above --
-# `refs/heads/<branch>` for a push, `refs/pull/N/merge` for a pull request --
-# and ungrouped they would run the same commit twice instead of one superseding
-# the other.
+# Grouped per event, per repository, per branch -- and the event is load-bearing.
 #
-# The repository is part of the key because a branch name is not unique across
-# forks. Two fork pull requests both opened from `main` -- an ordinary thing for
-# a drive-by contributor -- would otherwise share a group, and with
-# cancel-in-progress each new push to one would cancel the other's checks.
+# `push` and `pull_request` both fire for a commit on a same-repo branch. Under
+# a shared key one cancelled the other, and GitHub reports a cancelled check as
+# "not successful", so every healthy pull request rendered partly red. That is
+# not cosmetic: a checks list that is always partly red teaches its reader that
+# red is normal, and the next genuine failure then looks like the background.
+#
+# Keying on the event keeps that pair apart. Both runs complete, which costs
+# about a minute of duplicated CI per push against jobs of roughly 25 seconds.
+#
+# Worth paying, because the two runs do not check the same tree:
+#
+#   * the `push` run checks out the branch tip;
+#   * the `pull_request` run checks out the synthetic merge commit -- the tree
+#     that will actually land on `main`.
+#
+# A branch behind its base can be green at the tip and broken once merged. A
+# sample renamed on `main` against a link added here is enough: `links` passes
+# on both trees separately and fails on the merge. Only the `pull_request` run
+# ever sees that. And a pull request that edits the trigger block above can stop
+# matching `push` altogether -- narrowing `push.branches`, or coming from a
+# `branches-ignore` ref -- in which case the `push` run does not exist and the
+# `pull_request` run is the only one there is.
+#
+# An earlier revision of this branch skipped the `pull_request` jobs for
+# same-repo pull requests to avoid the duplicate, which is why both hazards are
+# written down here instead of being rediscovered. Skipping a run is only free
+# when it is genuinely redundant, and this one is not.
+#
+# Within one event, cancellation still means what it should: a newer commit
+# supersedes an older run on the same branch, and the cancelled check lands on
+# the commit that was superseded rather than on HEAD.
+#
+# The repository is in the key because a branch name is not unique across forks:
+# two fork pull requests both opened from `main` must not cancel each other.
 concurrency:
   group: >-
-    pr-checks-${{ github.workflow }}-${{
+    pr-checks-${{ github.workflow }}-${{ github.event_name }}-${{
       github.event.pull_request.head.repo.full_name || github.repository
     }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
@@ -62,7 +80,26 @@ permissions:
 
 jobs:
   validate:
-    name: Validate
+    # Both runs land in the same checks list, so the name has to say which tree
+    # failed. The `pull_request` run keeps the bare name and the `push` run is
+    # the one qualified, which is the opposite of what it looks like it should
+    # be. Two reasons, and the first is the load-bearing one:
+    #
+    #   * the `pull_request` run is the only one every pull request has. A fork
+    #     never pushes here, and a branch under `branches-ignore` gets no push
+    #     run either. Qualifying that run instead would leave exactly those
+    #     pull requests with no check under the plain name, so anything
+    #     configured against "Validate" would go unsatisfied precisely where
+    #     this run is the sole coverage;
+    #   * it is also the more authoritative of the two -- it checks the merge
+    #     result, which is the tree that lands.
+    #
+    # Tested for `push` specifically, not `!= 'pull_request'`. A dispatched run
+    # is the documented fallback for `pull_request` delivery failing, as it did
+    # on #19, and its checks attach to the pull request the same way. Suffixing
+    # it would leave the fallback unable to satisfy a bare required context --
+    # blocking the pull request it exists to unblock.
+    name: "Validate${{ github.event_name == 'push' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -103,7 +140,7 @@ jobs:
         run: node scripts/ci/validate.mjs tests
 
   pack:
-    name: Pack every sample
+    name: "Pack every sample${{ github.event_name == 'push' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -120,7 +157,7 @@ jobs:
         run: node scripts/ci/validate.mjs pack
 
   scaffold:
-    name: Scaffold a project from the packed package
+    name: "Scaffold a project from the packed package${{ github.event_name == 'push' && ' (branch tip)' || '' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

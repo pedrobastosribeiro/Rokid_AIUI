@@ -259,16 +259,19 @@ test('CI runs on push and skips the generated publish branches', () => {
   // exists for branches in this repository: a fork contributor pushes to their
   // own fork, so the base repo sees no push, and without `synchronize` a fork
   // PR is checked once on `opened` while every later commit inherits that green
-  // tick unverified. The duplicate run on same-repo PRs is cosmetic; a stale
-  // pass on an unchecked commit is not.
+  // tick unverified. The overlapping run on same-repo pull requests is kept on
+  // purpose -- it checks the merge commit rather than the branch tip.
   assert.match(trigger, /- synchronize/);
   assert.match(trigger, /branches-ignore:/);
   for (const branch of ['pt-br', 'pt-br-preview']) {
     assert.match(trigger, new RegExp(`^\\s*- ${branch}$`, 'm'), `${branch} must be excluded`);
   }
 
-  // Both triggers must land in one concurrency group, or the same commit runs
-  // twice rather than one superseding the other.
+  // The branch is part of the concurrency key under either trigger, which need
+  // different expressions to name it. Whether the two triggers *share* a group
+  // is a separate question, and the answer is no -- see the test below. This
+  // file used to assert the opposite here, in a comment, while checking
+  // something that passed either way.
   const concurrency = workflow.slice(workflow.indexOf('concurrency:'));
   assert.match(concurrency, /pull_request\.head\.ref \|\| github\.ref_name/);
 });
@@ -302,4 +305,134 @@ test('a terminator is judged against the full text, not the slice', () => {
   const text = 'O valor informado agora para a versão é 5.42 e continua depois';
   const clamped = clampSpeech(text, 42);
   assert.doesNotMatch(clamped, /\d\.$/, `cut inside the number: ${clamped}`);
+});
+
+// The workflow's jobs, each with its own direct keys. Enumerating the mappings
+// is what makes the assertions below invariants rather than samples: they can
+// then say "no job has X" and "every job has Y" and mean it, including for a
+// job added later.
+//
+// Nothing here assumes a layout. Indentation is read off the document -- the
+// jobs' own indent from the first entry, each job's key indent from its first
+// key -- so reindenting the mapping changes nothing, and steps, which sit
+// deeper, are never mistaken for job keys. Keys are unquoted before they are
+// compared, because `if:`, `'if':`, `"if":` and `if :` are one key to YAML and
+// GitHub honours all four.
+function parseJobs(workflow) {
+  const lines = workflow.split('\n');
+  const start = lines.findIndex((line) => /^jobs:/.test(line));
+  if (start === -1) throw new Error('no jobs: mapping in the workflow');
+
+  const isContent = (line) => line.trim() !== '' && !/^\s*#/.test(line);
+  const indentOf = (line) => line.match(/^ */)[0].length;
+  // A trailing `# ...` is a comment to YAML but just more characters to a
+  // substring match, so a qualifier appearing only inside one would satisfy an
+  // assertion while GitHub saw the bare name. A quoted scalar keeps its
+  // contents whole, since `#` inside quotes is literal.
+  const stripComment = (value) => {
+    const quoted = value.match(/^(['"])(?:\\.|(?!\1).)*\1/);
+    if (quoted) return quoted[0];
+    const comment = value.search(/(?:^|\s)#/);
+    return comment === -1 ? value : value.slice(0, comment).trim();
+  };
+  const entryOf = (line) => {
+    const m = line
+      .trim()
+      .match(/^(?:'([^']*)'|"([^"]*)"|([^:'"\s][^:]*?))\s*:(?:\s+(.*))?$/);
+    if (!m) return null;
+    return { key: (m[1] ?? m[2] ?? m[3]).trim(), value: stripComment((m[4] ?? '').trim()) };
+  };
+
+  const body = lines.slice(start + 1).filter(isContent);
+  if (body.length === 0) return [];
+  const jobIndent = indentOf(body[0]);
+
+  const jobs = [];
+  let current = null;
+  let keyIndent = null;
+  for (const line of body) {
+    const indent = indentOf(line);
+    if (indent < jobIndent) break;
+    if (indent === jobIndent) {
+      const entry = entryOf(line);
+      current = { name: entry ? entry.key : line.trim(), keys: new Map() };
+      jobs.push(current);
+      keyIndent = null;
+      continue;
+    }
+    if (current === null) continue;
+    if (keyIndent === null) keyIndent = indent;
+    if (indent !== keyIndent) continue;
+    const entry = entryOf(line);
+    if (entry) current.keys.set(entry.key, entry.value);
+  }
+  return jobs;
+}
+
+test('both CI runs survive, because they do not check the same tree', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/pr-checks.yml', import.meta.url),
+    'utf8',
+  );
+
+  // The fix for cancelled checks on healthy commits is this one key, not any
+  // job condition. `push` and `pull_request` both fire for a same-repo commit,
+  // and a shared group made one cancel the other -- which GitHub reports as
+  // "not successful". Separated by event, neither can reach the other.
+  const group = workflow.slice(
+    workflow.indexOf('concurrency:'),
+    workflow.indexOf('permissions:'),
+  );
+  assert.match(group, /github\.event_name/);
+  // Still fork-safe: two fork pull requests opened from `main` share a branch
+  // name and must not cancel each other.
+  assert.match(group, /head\.repo\.full_name \|\| github\.repository/);
+  // Within one event, superseding an older commit is still the right behaviour.
+  assert.match(group, /cancel-in-progress: true/);
+
+  const jobs = parseJobs(workflow);
+  assert.ok(jobs.length >= 3, `expected the CI jobs, found ${jobs.map((j) => j.name).join(', ')}`);
+
+  // No job may carry a job-level condition. A guard was tried and reverted,
+  // because the `push` run is not a substitute for the `pull_request` run:
+  //
+  //  1. `pull_request` checks out the synthetic merge commit; `push` checks out
+  //     the branch tip. A branch behind its base can pass at the tip and fail
+  //     merged -- a rename on `main` against a link added here does it, and
+  //     only the merge-commit run would catch it.
+  //  2. A pull request that edits the trigger block can stop matching `push`
+  //     entirely, so there is no push run to defer to. Trigger edits are then
+  //     the one change that goes unverified, which is the worst possible set.
+  //
+  // Both were reported on #21 after the guard shipped. The invariant is
+  // deliberately wider than that guard: any job-level condition fails here,
+  // including a legitimate one, so reintroducing one is a deliberate act.
+  assert.deepEqual(
+    jobs.filter((job) => job.keys.has('if')).map((job) => job.name),
+    [],
+    'a job-level condition is back; that is how the merge-result run got skipped',
+  );
+
+  // Every job -- not three of them -- must qualify its push run, or that job's
+  // two runs arrive under one name and a failure does not say which tree it
+  // came from.
+  //
+  // The qualifier tests `== 'push'` rather than `!= 'pull_request'`, which
+  // would also catch `workflow_dispatch`. Dispatch is the documented fallback
+  // for `pull_request` delivery failing, its checks attach to the pull request
+  // the same way, and suffixing it would leave the fallback unable to satisfy a
+  // bare required context -- blocking the pull request it exists to unblock.
+  //
+  // The bare name goes to the `pull_request` run because that is the only run
+  // every pull request has: a fork never pushes here, and neither does a
+  // `branches-ignore` ref.
+  const QUALIFIER = "${{ github.event_name == 'push' && ' (branch tip)' || '' }}";
+  assert.deepEqual(
+    jobs.filter((job) => !(job.keys.get('name') ?? '').includes(QUALIFIER)).map((job) => job.name),
+    [],
+    'every job must distinguish its two runs',
+  );
+
+  // `synchronize` is the only thing that checks a fork's later commits.
+  assert.match(workflow, /- synchronize/);
 });
